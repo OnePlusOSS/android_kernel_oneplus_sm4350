@@ -672,12 +672,21 @@ static int ffs_ep0_open(struct inode *inode, struct file *file)
 
 	ffs_log("state %d setup_state %d flags %lu opened %d", ffs->state,
 		ffs->setup_state, ffs->flags, atomic_read(&ffs->opened));
-
-	if (unlikely(ffs->state == FFS_CLOSING))
+/* @bsp, 2020/06/22 usb & PD porting */
+/* Add log to check ep0 status */
+	if (atomic_read(&ffs->opened)) {
+		pr_err("ep0 is already opened!\n");
 		return -EBUSY;
+	}
+
+	if (unlikely(ffs->state == FFS_CLOSING)) {
+		pr_err("FFS_CLOSING!\n");
+		return -EBUSY;
+	}
 
 	file->private_data = ffs;
 	ffs_data_opened(ffs);
+	pr_info("ep0_open success!\n");
 
 	return 0;
 }
@@ -1750,8 +1759,13 @@ static int ffs_fs_get_tree(struct fs_context *fc)
 		return invalf(fc, "No source specified");
 
 	ffs = ffs_data_new(fc->source);
-	if (unlikely(!ffs))
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(ffs)) {
+		if (!ffs)
+			return -ENOMEM;
+		else
+			return PTR_ERR(ffs);
+	}
+
 	ffs->file_perms = ctx->perms;
 	ffs->no_disconnect = ctx->no_disconnect;
 

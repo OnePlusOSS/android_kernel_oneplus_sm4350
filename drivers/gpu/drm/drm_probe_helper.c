@@ -533,7 +533,10 @@ prune:
 	list_for_each_entry(mode, &connector->modes, head)
 		mode->vrefresh = drm_mode_vrefresh(mode);
 
-	drm_mode_sort(&connector->modes);
+	//#ifdef OPLUS_FEATURE_ADFR
+	//keep order as DTS
+	//drm_mode_sort(&connector->modes);
+	//#endif
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] probed modes :\n", connector->base.id,
 			connector->name);

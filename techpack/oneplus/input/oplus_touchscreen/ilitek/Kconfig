@@ -1,0 +1,4 @@
+
+source "techpack/oneplus/input/oplus_touchscreen/ilitek/ilitek9881h/Kconfig"
+source "techpack/oneplus/input/oplus_touchscreen/ilitek/ilitek7807s/Kconfig"
+

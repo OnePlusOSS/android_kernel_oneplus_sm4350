@@ -135,7 +135,7 @@ _kgsl_pool_get_page(struct kgsl_page_pool *pool)
 }
 
 /* Returns the number of pages in all kgsl page pools */
-static int kgsl_pool_size_total(void)
+int kgsl_pool_size_total(void)
 {
 	int i;
 	int total = 0;
@@ -445,8 +445,7 @@ int kgsl_pool_alloc_pages(u64 size, struct page ***pages, struct device *dev)
 {
 	int count = 0;
 	int npages = size >> PAGE_SHIFT;
-	struct page **local = kvcalloc(npages, sizeof(*local),
-		GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN);
+	struct page **local = kvcalloc(npages, sizeof(*local), GFP_KERNEL);
 	u32 page_size, align;
 	u64 len = size;
 

@@ -1,0 +1,326 @@
+/* DTB: Platform related generic modifications */
+
+#include "display/holi-display-mtp.dtsi"
+
+&reserved_memory {
+	/*
+	this size if from
+	boot_images/boot/QcomPkg/SocPkg/Lahaina/Common/uefiplat.cfg
+	0x9FFF7000, 0x00008000, "Log Buffer",        AddMem, SYS_MEM, SYS_MEM_CAP, RtData, WRITE_BACK_XN
+	so we reserve this for bootloader log
+    	*/
+	bootloader_log_mem: bootloader_log_mem@0x9FFF7000 {
+		reg = <0 0x9FFF7000 0 0x00008000>;
+		label = "bootloader_log_mem";
+	};
+	/*
+	we need reserve after splash_memory reg = <0x0 0xe1000000 0x0 0x02300000>;
+	and we need add a reserver for avoid change memory map need reconfig,maybe 100M
+	*/
+	qcom: ramoops {
+		compatible = "ramoops";
+		reg = <0x0 0xd0000000 0x0 0x05B8000>;
+		//pmsg-size = <0x200000>;
+		record-size =  <0x40000>; //256k
+		console-size = <0x40000>; //256k
+		ftrace-size =  <0x200000>; //1M
+		pmsg-size=	   <0x200000>; //1M
+		devinfo-size=  <0x08000>;  //32k
+		dumpinfo-size=  <0x08000>; //32k
+		rsv01info-size=  <0x08000>; //32k
+		rsv02info-size=  <0x08000>; //32k
+		rsv03info-size=  <0x08000>; //32k
+		rsv04info-size=  <0x08000>; //32k
+		rsv05info-size=  <0x08000>; //32k
+		ecc-size=	   <0x0>;
+		mem-type = <2>;
+	};
+
+        /*0xd0000000+0x01000000=0xd1000000*/
+	param_mem: param_mem@0xd1000000 {
+		reg = <0 0xd1000000 0 0x100000>; //1M same as partition.xml
+		label = "param_mem";
+	};
+};
+
+
+&qupv3_se0_i2c {
+	status = "disabled";
+};
+&qupv3_se8_i2c {
+	status = "disabled";
+};
+
+&soc {
+
+	bootloader_log {
+	        compatible = "bootloader_log";
+		linux,contiguous-region = <&bootloader_log_mem>;
+	};
+
+        oem_rf_cable:oem_rf_cable{
+                compatible = "oem,rf_cable";
+                interrupt-parent = <&tlmm>;
+                rf,cable-gpio-0 = <&tlmm 24 0>;
+                /*rf,cable-gpio-0 = <&tlmm 165 0>;
+                rf,cable-gpio-1 = <&tlmm 27 0>;
+                rf,cable-gpio-2 = <&tlmm 92 0>;
+                rf,cable-gpio-3 = <&tlmm 44 0>;
+                rf,cable-gpio-4 = <&tlmm 155 0>;*/
+                rf,cable-support-timer = <0>;
+                rf,cable-gpio-num = <1>;
+                oem,rf_uevent_feature_enable;
+                pinctrl-names = "oem_rf_cable_active";
+                //pinctrl-0= <&rf_cable_ant0_active &rf_cable_ant1_active &rf_cable_ant2_active&rf_cable_ant3_active &rf_cable_ant7_active>;
+                pinctrl-0= <&rf_con_test_ant7_active>;
+	};
+/*#ifdef OPLUS_FEATURE_TP_BASIC*/
+/* Guoliang.wu@Bsp.Group.Tp, 2020/08/29, Add for tp spi cs */
+	pinctrl@400000 {
+		qupv3_se0_spi_pins {
+
+			qupv3_se0_spi_sleep: qupv3_se0_spi_sleep {
+				/delete-node/ mux;
+				/delete-node/ config;
+				mux {
+					pins = "gpio0", "gpio1",
+							"gpio2";
+					function = "qup00";
+				};
+
+				config {
+					pins = "gpio0", "gpio1",
+							"gpio2";
+					drive-strength = <6>;
+					bias-disable;
+				};
+			};
+
+			qupv3_se0_cs_sleep: qupv3_se0_cs_sleep {
+				mux {
+					pins = "gpio3";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio3";
+					drive-strength = <2>;
+					/*bias-disable;*/
+					bias-pull-up;
+				};
+			};
+		};
+	};
+
+	spi@4a80000 {
+		pinctrl-1 = <&qupv3_se0_spi_sleep &qupv3_se0_cs_sleep>;
+	};
+
+	fingerprint_detect {
+		compatible = "oneplus,fpdetect";
+		fp-gpio-id0 = <&tlmm 53 0>;
+		fp-gpio-id1 = <&tlmm 12 0>;
+                pinctrl-names = "fpdetect_id0_init";
+                pinctrl-0 = <&fpdetect_id0_init>;
+
+	};
+
+	goodix_fp {
+		compatible = "goodix,fingerprint";
+		interrupt-parent = <&tlmm>;
+		interrupts = <17 0>;
+		fp-gpio-irq = <&tlmm 17 0x1>;
+		fp-gpio-reset = <&tlmm 18 0x0>;
+		fppower-supply = <&pm6350_l8>;
+		//gpio-power = <&tlmm 91 0x2>;
+		pinctrl-names = "fp_en_init", "fp_dis_init";
+		pinctrl-0 = <&gpio_goodix_irq_default>;
+		notify_tpinfo_flag = <1>;
+		status = "okay";
+	};
+
+	fpc1020 {
+		compatible = "fpc,fpc1020"; //Manufacture, and Model
+		interrupt-parent = <&tlmm>;
+		interrupts = <132 0x0>;
+		fpc,gpio_irq = <&tlmm 17 0x00>;
+		fpc,gpio_rst = <&tlmm 18 0x0>;
+		vdd_io-supply   = <&pm6350_l8>;
+		pinctrl-names = "fpc1020_reset_reset",
+			"fpc1020_reset_active",
+			"fpc1020_irq_active";
+		pinctrl-0 = <&msm_gpio_18>;
+		pinctrl-1 = <&msm_gpio_18_output_high>;
+		pinctrl-2 = <&msm_gpio_17>;
+	};
+	oem_project_info:oem_project_info{
+		compatible = "oem,project_info";
+	};
+	sim_holder_detect {
+		compatible = "oneplus,sim_holder_detect";
+		qcom,sim-holder-det-gpio = <&tlmm 82 0x00>;
+	};
+/*#endif OPLUS_FEATURE_TP_BASIC*/
+/* end */
+};
+
+&tlmm {
+    rf_con_test_ant7_active: rf_con_test_ant7_active {
+        mux {
+            pins = "gpio24";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio24";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+   /* rf_cable_ant0_active: rf_cable_ant0_active {
+        mux {
+            pins = "gpio165";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio165";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+        rf_cable_ant1_active: rf_cable_ant1_active {
+        mux {
+            pins = "gpio27";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio27";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+        rf_cable_ant2_active: rf_cable_ant2_active {
+        mux {
+            pins = "gpio92";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio92";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+        rf_cable_ant3_active: rf_cable_ant3_active {
+        mux {
+            pins = "gpio44";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio44";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+        rf_cable_ant7_active: rf_cable_ant7_active {
+        mux {
+            pins = "gpio155";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio155";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };*/
+        fingerprint_detect{
+                fpdetect_id0_init: fpdetect_id0_init {
+                        mux {
+                               pins = "gpio53";
+                               function = "gpio";
+                        };
+                        config {
+                                pins = "gpio53";
+                                drive-strength = <2>;
+                                bias-diable;
+                                output-high;
+                        };
+                };
+        };
+
+	goodix_fp{
+		gpio_goodix_irq_default: gpio_goodix_irq_default {
+			mux {
+				pins = "gpio17";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio17";
+				drive-strength = <2>;
+				bias-disable;
+				input-enable;
+			};
+		};
+	};
+
+	fpc1020 {
+		msm_gpio_18: msm_gpio_18 {
+			mux {
+				pins = "gpio18";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio18";
+				drive-strength = <2>;
+				bias-diable;
+				output-low;
+			};
+		};
+		msm_gpio_18_output_high: msm_gpio_18_output_high {
+			mux {
+				pins = "gpio18";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio18";
+				drive-strength = <2>;
+				bias-diable;
+				output-high;
+			};
+		};
+		msm_gpio_17: msm_gpio_17 {
+			mux {
+				pins = "gpio17";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio17";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+};
+&sdhc_2 {
+	status = "ok";
+
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&sdc2_on>;
+	pinctrl-1 = <&sdc2_off>;
+
+	vdd-supply = <&L9E>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 800000>;
+
+	vdd-io-supply = <&L6E>;
+	qcom,vdd-io-voltage-level = <1800000 2960000>;
+	qcom,vdd-io-current-level = <0 22000>;
+
+	cd-gpios = <&tlmm 94 GPIO_ACTIVE_HIGH>;
+};
+
+/* add oplus audio overlay */
+#include "audio/oplus-holi-audio-overlay.dtsi"
+/* add oplus NFC dtsi */
+#include "oplus-holi-nfc.dtsi"
+/*add oplus camera dtsi*/
+#include "camera/holi-camera-sensor-mtp.dtsi"
+#include "oplus_holi_tp_common.dtsi"

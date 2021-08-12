@@ -461,8 +461,8 @@ DEFINE_CLK_RPMH_BCM(lahaina, hwkm, "HK0");
 static struct clk_hw *lahaina_rpmh_clocks[] = {
 	[RPMH_CXO_CLK]		= &lahaina_bi_tcxo.hw,
 	[RPMH_CXO_CLK_A]	= &lahaina_bi_tcxo_ao.hw,
-	[RPMH_DIV_CLK1]		= &lahaina_div_clk1.hw,
-	[RPMH_DIV_CLK1_A]	= &lahaina_div_clk1_ao.hw,
+	[RPMH_DIV_CLK1]     = &lahaina_div_clk1.hw,
+	[RPMH_DIV_CLK1_A]   = &lahaina_div_clk1_ao.hw,
 	[RPMH_LN_BB_CLK1]	= &lahaina_ln_bb_clk1.hw,
 	[RPMH_LN_BB_CLK1_A]	= &lahaina_ln_bb_clk1_ao.hw,
 	[RPMH_LN_BB_CLK2]	= &lahaina_ln_bb_clk2.hw,

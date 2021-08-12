@@ -564,6 +564,19 @@ struct clk_hw *debugcc_holi_hws[] = {
 	&l3_clk.hw,
 };
 
+#if defined(CONFIG_CONTROL_CENTER) || defined(CONFIG_HOUSTON)
+int get_only_mccc_hw(struct clk_hw **hwptr)
+{
+	if (unlikely(!&(measure_only_mccc_clk.hw))) {
+		*hwptr = NULL;
+		return -EINVAL;
+	}
+	*hwptr = &(measure_only_mccc_clk.hw);
+	return 0;
+}
+#endif
+
+
 static const struct of_device_id clk_debug_match_table[] = {
 	{ .compatible = "qcom,holi-debugcc" },
 	{ }

@@ -1,0 +1,23 @@
+/**
+** add st21nfc device.
+*/
+
+&qupv3_se8_i2c {
+        status = "ok";
+
+        st21nfc: st21nfc@08 {
+                compatible = "st,st21nfc";
+                reg = <0x08>;
+                interrupt-parent = <&tlmm>;
+                interrupts = <9 0>;
+                reset-gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
+                irq-gpios = <&tlmm 9 GPIO_ACTIVE_HIGH>;
+                status = "ok";
+        };
+};
+
+&qupv3_se0_i2c {
+        nq@28 {
+                status = "disabled";
+        };
+};

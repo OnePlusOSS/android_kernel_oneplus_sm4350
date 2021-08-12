@@ -1,0 +1,3 @@
+/* DTB: Platform related generic modifications */
+#include "../qcom/holi.dtsi"
+

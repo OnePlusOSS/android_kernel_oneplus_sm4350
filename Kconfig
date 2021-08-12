@@ -27,6 +27,8 @@ source "crypto/Kconfig"
 
 source "lib/Kconfig"
 
+source "techpack/oneplus/qcom_pmicwd/Kconfig"
+
 source "lib/Kconfig.debug"
 
 source "Documentation/Kconfig"

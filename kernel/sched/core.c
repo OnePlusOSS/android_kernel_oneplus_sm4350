@@ -13,6 +13,9 @@
 #include <linux/kcov.h>
 #include <linux/irq.h>
 #include <linux/scs.h>
+#ifdef CONFIG_UXCHAIN_V2
+#include <linux/rwsem.h>
+#endif
 
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
@@ -25,6 +28,12 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
+#ifdef CONFIG_HOUSTON
+#include <oneplus/houston/houston_helper.h>
+#endif
+#ifdef CONFIG_IM
+#include <linux/oem/im.h>
+#endif
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/dtask.h>
@@ -1380,6 +1389,10 @@ void deactivate_task(struct rq *rq, struct task_struct *p, int flags)
 #endif
 
 	dequeue_task(rq, p, flags);
+#if defined(CONFIG_CONTROL_CENTER) && defined(CONFIG_IM)
+	if (unlikely(im_main(p) || im_enqueue(p) || im_render(p)))
+		restore_user_nice_safe(p);
+#endif
 }
 
 /*
@@ -1464,6 +1477,24 @@ static inline void check_class_changed(struct rq *rq, struct task_struct *p,
 void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 {
 	const struct sched_class *class;
+
+#ifdef CONFIG_UXCHAIN
+	u64 wallclock = sched_ktime_clock();
+
+	if (sysctl_uxchain_enabled &&
+		(sysctl_launcher_boost_enabled ||
+		wallclock - rq->curr->oncpu_time < PREEMPT_DISABLE_NS) &&
+		(rq->curr->static_ux || rq->curr->dynamic_ux) &&
+		!(p->flags & PF_WQ_WORKER) && !task_has_rt_policy(p))
+		return;
+#endif
+#ifdef CONFIG_UXCHAIN_V2
+	if (sysctl_uxchain_v2 &&
+		wallclock - rq->curr->get_mmlock_ts < PREEMPT_DISABLE_RWSEM &&
+		rq->curr->get_mmlock &&
+		!(p->flags & PF_WQ_WORKER) && !task_has_rt_policy(p))
+		return;
+#endif
 
 	if (p->sched_class == rq->curr->sched_class) {
 		rq->curr->sched_class->check_preempt_curr(rq, p, flags);
@@ -1645,6 +1676,13 @@ void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
 	bool queued, running;
 
 	lockdep_assert_held(&p->pi_lock);
+
+#ifdef CONFIG_ARCH_HOLI
+/* v-danshuaixin@oppo.com disable aux kswapd migrate to cpu6 and cpu 7 */
+	if ((p->flags & PF_KSWAPD) &&
+	     (cpumask_test_cpu(6, new_mask) || cpumask_test_cpu(7, new_mask)))
+		return;
+#endif /*CONFIG_ARCH_HOLI */
 
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
@@ -2995,7 +3033,9 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 */
 	p->prio = current->normal_prio;
 	trace_android_rvh_prepare_prio_fork(p);
-
+#ifdef CONFIG_SF_BOOST
+	p->compensate_need = 0;
+#endif
 	uclamp_fork(p);
 
 	/*
@@ -3005,9 +3045,16 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 		if (task_has_dl_policy(p) || task_has_rt_policy(p)) {
 			p->policy = SCHED_NORMAL;
 			p->static_prio = NICE_TO_PRIO(0);
+#ifdef CONFIG_CONTROL_CENTER
+			p->cached_prio = p->static_prio;
+#endif
 			p->rt_priority = 0;
 		} else if (PRIO_TO_NICE(p->static_prio) < 0)
+#ifdef CONFIG_CONTROL_CENTER
+			p->cached_prio = p->static_prio = NICE_TO_PRIO(0);
+#else
 			p->static_prio = NICE_TO_PRIO(0);
+#endif
 
 		p->prio = p->normal_prio = __normal_prio(p);
 		set_load_weight(p, false);
@@ -3058,6 +3105,11 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 #ifdef CONFIG_SMP
 	plist_node_init(&p->pushable_tasks, MAX_PRIO);
 	RB_CLEAR_NODE(&p->pushable_dl_tasks);
+#endif
+
+#ifdef CONFIG_UXCHAIN_V2
+	if (current->static_ux && sysctl_uxchain_v2 && sysctl_launcher_boost_enabled)
+		p->fork_by_static_ux = 1;
 #endif
 	return 0;
 }
@@ -4271,7 +4323,14 @@ static void __sched notrace __schedule(bool preempt)
 		 */
 		++*switch_count;
 
+#ifdef CONFIG_UXCHAIN
+		prev->oncpu_time = 0;
+		next->oncpu_time = wallclock;
+#endif
 		trace_sched_switch(preempt, prev, next);
+#ifdef CONFIG_HOUSTON
+		ht_sched_switch_update(prev, next);
+#endif
 
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
@@ -4693,7 +4752,35 @@ static inline int rt_effective_prio(struct task_struct *p, int prio)
 }
 #endif
 
-void set_user_nice(struct task_struct *p, long nice)
+#ifdef CONFIG_CONTROL_CENTER
+void restore_user_nice_safe(struct task_struct *p)
+{
+	long nice = PRIO_TO_NICE(p->cached_prio);
+
+	if (rt_prio(p->prio))
+		return;
+
+	if (task_nice(p) == nice || nice < MIN_NICE || nice > MAX_NICE)
+		return;
+
+	if (task_on_rq_queued(p))
+		return;
+
+	if (task_current(task_rq(p), p))
+		return;
+
+	if (!time_after64(get_jiffies_64(), p->nice_effect_ts))
+		return;
+
+	p->static_prio = NICE_TO_PRIO(nice);
+	set_load_weight(p, true);
+	p->prio = effective_prio(p);
+
+	/* update nice_effect_ts to ULLONG_MAX */
+	p->nice_effect_ts = ULLONG_MAX;
+}
+
+void set_user_nice_no_cache(struct task_struct *p, long nice)
 {
 	bool queued, running;
 	int old_prio, delta;
@@ -4708,7 +4795,6 @@ void set_user_nice(struct task_struct *p, long nice)
 	 */
 	rq = task_rq_lock(p, &rf);
 	update_rq_clock(rq);
-	trace_android_rvh_set_user_nice(p, &nice);
 
 	/*
 	 * The RT priorities are set via sched_setscheduler(), but we still
@@ -4728,6 +4814,77 @@ void set_user_nice(struct task_struct *p, long nice)
 		put_prev_task(rq, p);
 
 	p->static_prio = NICE_TO_PRIO(nice);
+	set_load_weight(p, true);
+	old_prio = p->prio;
+	p->prio = effective_prio(p);
+	delta = p->prio - old_prio;
+
+	if (queued) {
+		enqueue_task(rq, p, ENQUEUE_RESTORE | ENQUEUE_NOCLOCK);
+		/*
+		 * If the task increased its priority or is running and
+		 * lowered its priority, then reschedule its CPU:
+		 */
+		if (delta < 0 || (delta > 0 && task_running(rq, p)))
+			resched_curr(rq);
+	}
+	if (running)
+		set_next_task(rq, p);
+out_unlock:
+	task_rq_unlock(rq, p, &rf);
+}
+EXPORT_SYMBOL(set_user_nice_no_cache);
+#endif
+
+void set_user_nice(struct task_struct *p, long nice)
+{
+	bool queued, running;
+	int old_prio, delta;
+	struct rq_flags rf;
+	struct rq *rq;
+
+#ifdef CONFIG_CONTROL_CENTER
+	if (task_nice(p) == nice || nice < MIN_NICE || nice > MAX_NICE) {
+		p->cached_prio = p->static_prio;
+		return;
+	}
+#else
+	if (task_nice(p) == nice || nice < MIN_NICE || nice > MAX_NICE)
+		return;
+#endif
+
+	/*
+	 * We have to be careful, if called from sys_setpriority(),
+	 * the task might be in the middle of scheduling on another CPU.
+	 */
+	rq = task_rq_lock(p, &rf);
+	update_rq_clock(rq);
+	trace_android_rvh_set_user_nice(p, &nice);
+
+	/*
+	 * The RT priorities are set via sched_setscheduler(), but we still
+	 * allow the 'normal' nice value to be set - but as expected
+	 * it wont have any effect on scheduling until the task is
+	 * SCHED_DEADLINE, SCHED_FIFO or SCHED_RR:
+	 */
+	if (task_has_dl_policy(p) || task_has_rt_policy(p)) {
+		p->static_prio = NICE_TO_PRIO(nice);
+#ifdef CONFIG_CONTROL_CENTER
+		p->cached_prio = p->static_prio;
+#endif
+		goto out_unlock;
+	}
+	queued = task_on_rq_queued(p);
+	running = task_current(rq, p);
+	if (queued)
+		dequeue_task(rq, p, DEQUEUE_SAVE | DEQUEUE_NOCLOCK);
+	if (running)
+		put_prev_task(rq, p);
+
+	p->static_prio = NICE_TO_PRIO(nice);
+#ifdef CONFIG_CONTROL_CENTER
+	p->cached_prio = p->static_prio;
+#endif
 	set_load_weight(p, true);
 	old_prio = p->prio;
 	p->prio = effective_prio(p);
@@ -4893,7 +5050,12 @@ static void __setscheduler_params(struct task_struct *p,
 	if (dl_policy(policy))
 		__setparam_dl(p, attr);
 	else if (fair_policy(policy))
+#ifdef CONFIG_CONTROL_CENTER
+		p->cached_prio =
+			p->static_prio = NICE_TO_PRIO(attr->sched_nice);
+#else
 		p->static_prio = NICE_TO_PRIO(attr->sched_nice);
+#endif
 
 	/*
 	 * __sched_setscheduler() ensures attr->sched_priority == 0 when

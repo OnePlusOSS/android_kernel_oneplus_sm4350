@@ -214,6 +214,10 @@ struct qpnp_qg {
 	struct cycle_counter	*counter;
 	/* ttf */
 	struct ttf		*ttf;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg, 2020/09/16, add for gauge */
+	int			oplus_batt_type;
+#endif
 };
 
 struct ocv_all {

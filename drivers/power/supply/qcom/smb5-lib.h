@@ -27,8 +27,33 @@ enum print_reason {
 	PR_PARALLEL	= BIT(3),
 	PR_OTG		= BIT(4),
 	PR_WLS		= BIT(5),
+#ifdef OPLUS_FEATURE_USB_PORT_PROTECT
+	/* @bsp, 2019/07/05 Battery & Charging porting */
+	PR_OP_DEBUG	= BIT(6),
+	PR_FAST_DEBUG	= BIT(7),
+#endif
 };
 
+#define TIME_200MS 200
+#define TIME_100MS 100
+
+#ifdef OPLUS_FEATURE_USB_PORT_PROTECT
+#define NORMAL_CHECK_INTERVAL_PERIOD 300 /*ms*/
+#define FAST_CHECK_INTERVAL_PERIOD 100 /*ms*/
+#define FAST_CHECK_THRESHOLD_TEMP 45
+#define FIRST_PROTECT_CONNECTER_TEMP 60
+#define SECOND_PROTECT_CONNECTER_TEMP 45
+#define SECOND_PROTECT_INTERVAL_TEMP 15
+#define THIRD_PROTECT_RISE_RATE 3
+#define THIRD_PROTECT_LOOP_TEMP 40
+#define THIRD_PROTECT_INTERVAL_TEMP 15
+#define THIRD_PROTECT_BASE_TEMP 20
+
+#define TYPE_C_CC_CURRSRC_CONTROL_REG		(TYPEC_BASE + 0x5C)
+#define TYPE_C_CC_CURRSRC_CONTROL_MASK		GENMASK(3, 0)
+#endif
+
+#define HW_DETECT_VOTER		"HW_DETECT_VOTER"
 #define DEFAULT_VOTER			"DEFAULT_VOTER"
 #define USER_VOTER			"USER_VOTER"
 #define PD_VOTER			"PD_VOTER"
@@ -59,6 +84,14 @@ enum print_reason {
 #define PL_FCC_LOW_VOTER		"PL_FCC_LOW_VOTER"
 #define WBC_VOTER			"WBC_VOTER"
 #define HW_LIMIT_VOTER			"HW_LIMIT_VOTER"
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+#define CCDETECT_VOTER			"CCDETECT_VOTER"
+#define DIVIDER_SET_VOTER		"DIVIDER_SET_VOTER"
+#define PD_DIS_VOTER			"PD_DIS_VOTER"
+#define SWARP_OTG_VOTER			"SWARP_OTG_VOTER"
+#define PL_BQ_DISABLE_VOTER		"PL_BQ_DISABLE_VOTER"
+#endif
 #define PL_SMB_EN_VOTER			"PL_SMB_EN_VOTER"
 #define FORCE_RECHARGE_VOTER		"FORCE_RECHARGE_VOTER"
 #define LPD_VOTER			"LPD_VOTER"
@@ -83,9 +116,17 @@ enum print_reason {
 #define ICL_CHANGE_VOTER		"ICL_CHANGE_VOTER"
 #define OVERHEAT_LIMIT_VOTER		"OVERHEAT_LIMIT_VOTER"
 #define TYPEC_SWAP_VOTER		"TYPEC_SWAP_VOTER"
+#ifdef OPLUS_FEATURE_USB_PORT_PROTECT
+#define HOT_PROTECT_VOTER		"HOT_PROTECT_VOTER"
+#endif
 
 #define BOOST_BACK_STORM_COUNT	3
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+#define WEAK_CHG_STORM_COUNT	3
+#else
 #define WEAK_CHG_STORM_COUNT	8
+#endif
 
 #define VBAT_TO_VRAW_ADC(v)		div_u64((u64)v * 1000000UL, 194637UL)
 
@@ -93,10 +134,25 @@ enum print_reason {
 #define ITERM_LIMITS_PM8150B_MA		10000
 #define ADC_CHG_ITERM_MASK		32767
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+#define USB_TEMP_HIGH			0x01//bit0
+#define USB_WATER_DETECT		0x02//bit1
+#define USB_RESERVE2			0x04//bit2
+#define USB_RESERVE3			0x08//bit3
+#define USB_RESERVE4			0x10//bit4
+#define USB_DONOT_USE			0x80000000//bit31
+#endif
+
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
 #define CDP_CURRENT_UA			1500000
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+#define DCP_CURRENT_UA                  2000000
+#else
 #define DCP_CURRENT_UA			1500000
+#endif
 #define HVDCP_CURRENT_UA		3000000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
 #define TYPEC_MEDIUM_CURRENT_UA		1500000
@@ -367,11 +423,23 @@ struct smb_iio {
 	struct iio_channel	*mid_chan;
 	struct iio_channel	*batt_i_chan;
 	struct iio_channel	*connector_temp_chan;
+#ifdef OPLUS_FEATURE_USB_PORT_PROTECT
+/* @bsp 2018/07/30 add usb connector temp detect and wr */
+	struct iio_channel	*connector_temp_chan_sec;
+	struct iio_channel	*batt_temp_chan;
+#endif
 	struct iio_channel	*sbux_chan;
 	struct iio_channel	*vph_v_chan;
 	struct iio_channel	*die_temp_chan;
 	struct iio_channel	*skin_temp_chan;
 	struct iio_channel	*smb_temp_chan;
+	struct iio_channel	*sys_skin_temp_chan;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+	struct iio_channel	*chgid_v_chan;
+	struct iio_channel	*usbtemp_v_chan_l;
+	struct iio_channel	*usbtemp_v_chan_r;
+#endif
 };
 
 enum pmic_type {
@@ -400,6 +468,12 @@ struct smb_charger {
 	int			weak_chg_icl_ua;
 	u32			sdam_base;
 	bool			pd_not_supported;
+/* @bsp, 2020/04/10 add to support pd 9v */
+	bool			pd_9vsupported;
+/* @bsp, 2020/04/22 add to support qc */
+	bool			support_hvdcp;
+	bool			hvdcp_check;
+	bool			swarp_supported;
 
 	/* locks */
 	struct mutex		smb_lock;
@@ -417,6 +491,10 @@ struct smb_charger {
 	struct power_supply		*dc_psy;
 	struct power_supply		*usb_port_psy;
 	struct power_supply		*wls_psy;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+	struct power_supply		*ac_psy;
+#endif
 
 	/* notifiers */
 	struct notifier_block	nb;
@@ -441,6 +519,7 @@ struct smb_charger {
 
 	/* votables */
 	struct votable		*dc_suspend_votable;
+	struct votable		*otg_toggle_votable;
 	struct votable		*fcc_votable;
 	struct votable		*fcc_main_votable;
 	struct votable		*fv_votable;
@@ -465,8 +544,15 @@ struct smb_charger {
 	struct work_struct	moisture_protection_work;
 	struct work_struct	chg_termination_work;
 	struct work_struct	dcin_aicl_work;
+	struct work_struct	dump_reg_work;
 	struct work_struct	cp_status_change_work;
 	struct delayed_work	ps_change_timeout_work;
+	struct delayed_work	unplug_check_work;
+	/* @bsp, 2020/08/04, add to detect SVID */
+	struct delayed_work register_pps_work;
+	struct work_struct	otg_switch_work;
+	struct wakeup_source	*chg_wake_lock;
+	struct wakeup_source	*chg_aging_wake_lock;
 	struct delayed_work	clear_hdc_work;
 	struct delayed_work	icl_change_work;
 	struct delayed_work	pl_enable_work;
@@ -479,7 +565,10 @@ struct smb_charger {
 	struct delayed_work	pr_swap_detach_work;
 	struct delayed_work	pr_lock_clear_work;
 	struct delayed_work	role_reversal_check;
-
+#ifdef OPLUS_FEATURE_USB_PORT_PROTECT
+	struct delayed_work connecter_check_work;
+	struct delayed_work connecter_recovery_work;
+#endif
 	struct alarm		lpd_recheck_timer;
 	struct alarm		moisture_protection_alarm;
 	struct alarm		chg_termination_alarm;
@@ -494,6 +583,42 @@ struct smb_charger {
 	int			sec_chg_selected;
 	int			cp_reason;
 	int			cp_topo;
+#ifdef OPLUS_FEATURE_USB_PORT_PROTECT
+/* @bsp, add the external ship-mode and connecter temp detect start*/
+	int			*usb_connector_temp;
+	int			*usb_interval_temp;
+	int			*disable_connector_protect;
+
+	int			*connector_temp_1;
+	int			*connector_temp_2;
+	int			count_total;
+	int			count_run;
+	int			filter_count;
+	int			pre_temp;
+	int			current_temp;
+	int			connecter_voltage;
+	int			skin_thermal_temp;
+	int			vbus_ctrl;
+
+/* @bsp, add the external ship-mode and connecter temp detect end*/
+	int			normal_check_interval_period;
+	int			fast_check_interval_period;
+	int			fast_check_threshold_temp;
+	int			high_temp_short_check_timeout;
+	int			first_protect_connecter_temp;
+	int			second_protect_connecter_temp;
+	int			second_protect_interval_temp;
+	int			third_protect_rise_rate;
+	int			third_protect_loop_temp;
+	int			third_protect_interval_temp;
+	int			third_protect_base_temp;
+	bool			is_aging_test;
+#endif
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+	struct delayed_work	chg_monitor_work;
+	struct delayed_work	typec_disable_cmd_work;
+#endif
 
 	/* pd */
 	int			voltage_min_uv;
@@ -509,6 +634,43 @@ struct smb_charger {
 	bool			typec_role_swap_failed;
 
 	/* cached status */
+	int				dump_count;
+	int				fastchg_present_wait_count;
+	int				ck_apsd_count;
+	int				slow_chg_count;
+	int				ck_dash_count;
+	int				ck_unplug_count;
+	int				recovery_boost_count;
+	int				op_icl_val;
+	int				plug_irq;
+	int				hw_detect;
+	int				pre_cable_pluged;
+	bool				apsd_not_done;
+	bool				slow_charger;
+	bool				check_slow_charge;
+	bool				otg_switch;
+	bool				use_fake_chgvol;
+	bool				use_fake_temp;
+	bool				use_fake_protect_sts;
+	bool				vbus_present;
+	bool				hvdcp_present;
+	bool				dash_present;
+	bool				charger_collpse;
+	bool				usb_enum_status;
+	bool				non_std_chg_present;
+	bool				usb_type_redet_done;
+	bool				time_out;
+	bool				disable_normal_chg_for_dash;
+	bool				suspend_by_voltage_switch;
+	bool				ship_mode;
+	bool				dash_on;
+	bool				fastchg_switch_disable;
+	bool				qc_configed;
+	bool				chg_disabled;
+	bool				chg_ovp;
+	bool				vbus_uovp_satus;
+	bool				is_power_changed;
+	bool				recharge_pending;
 	bool			system_suspend_supported;
 	int			boost_threshold_ua;
 	int			system_temp_level;
@@ -517,6 +679,7 @@ struct smb_charger {
 	int			dcp_icl_ua;
 	int			fake_capacity;
 	int			fake_batt_status;
+	int			fake_temp;
 	bool			step_chg_enabled;
 	bool			sw_jeita_enabled;
 	bool			typec_legacy_use_rp_icl;
@@ -528,6 +691,9 @@ struct smb_charger {
 	bool			fake_chg_status_on_debug_batt;
 	int			default_icl_ua;
 	int			otg_cl_ua;
+	int			connecter_temp;
+	bool			connector_short;
+	int			disconnect_vbus;
 	bool			uusb_apsd_rerun_done;
 	bool			typec_present;
 	int			fake_input_current_limited;
@@ -599,6 +765,11 @@ struct smb_charger {
 	int                     qc2_max_pulses;
 	enum qc2_non_comp_voltage qc2_unsupported_voltage;
 	bool			dbc_usbov;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+	bool			fake_usb_insertion;
+	bool			fake_typec_insertion;
+#endif
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
@@ -625,7 +796,95 @@ struct smb_charger {
 	int			dcin_uv_count;
 	ktime_t			dcin_uv_last_time;
 	int			last_wls_vout;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+	int			pre_current_ma;
+	bool			is_dpdm_on_usb;
+	struct delayed_work	divider_set_work;
+	struct work_struct	dpdm_set_work;
+	struct work_struct	chargerid_switch_work;
+	struct mutex 		pinctrl_mutex;
+
+	int			ccdetect_gpio;
+	int			ccdetect_irq;
+	struct pinctrl		*ccdetect_pinctrl;
+	struct pinctrl_state	*ccdetect_active;
+	struct pinctrl_state	*ccdetect_sleep;
+	struct pinctrl		*usbtemp_gpio1_adc_pinctrl;
+	struct pinctrl_state	*usbtemp_gpio1_default;
+	struct delayed_work	ccdetect_work;
+	struct pinctrl		*chg_2uart_pinctrl;
+	struct pinctrl_state	*chg_2uart_default;
+	struct pinctrl_state	*chg_2uart_sleep;
+
+	int			shipmode_id_gpio;
+	struct pinctrl		*shipmode_id_pinctrl;
+	struct pinctrl_state	*shipmode_id_active;
+#endif
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* @bsp.chg 2020/09/02, add for charger */
+enum skip_reason {
+	REASON_OTG_ENABLED	= BIT(0),
+	REASON_FLASH_ENABLED	= BIT(1)
+};
+
+struct smb_dt_props {
+	int                     usb_icl_ua;
+	enum float_options      float_option;
+	int                     chg_inhibit_thr_mv;
+	bool                    no_battery;
+	bool                    hvdcp_disable;
+	bool                    hvdcp_autonomous;
+	bool                    adc_based_aicl;
+	int                     sec_charger_config;
+        int                     auto_recharge_soc;
+        int                     auto_recharge_vbat_mv;
+        int                     wd_bark_time;
+        int                     wd_snarl_time_cfg;
+        int                     batt_profile_fcc_ua;
+        int                     batt_profile_fv_uv;
+        int                     term_current_src;
+        int                     term_current_thresh_hi_ma;
+        int                     term_current_thresh_lo_ma;
+        int                     disable_suspend_on_collapse;
+};
+
+struct smb5 {
+        struct smb_charger      chg;
+        struct dentry           *dfs_root;
+        struct smb_dt_props     dt;
+        unsigned int            nchannels;
+        struct iio_channel      *iio_chans;
+        struct iio_chan_spec    *iio_chan_ids;
+};
+
+struct qcom_pmic {
+	struct smb5 		*smb5_chip;
+	struct iio_channel 	*pm8150b_vadc_dev;
+	struct iio_channel 	*pm8150b_usbtemp_vadc_dev;
+
+	/* for complie*/
+	bool			otg_pulse_skip_dis;
+	int			pulse_cnt;
+	unsigned int		therm_lvl_sel;
+	bool			psy_registered;
+	int			usb_online;
+
+	/* copy from msm8976_pmic begin */
+	int			bat_charging_state;
+	bool	 		suspending;
+	bool			aicl_suspend;
+	bool			usb_hc_mode;
+	int    			usb_hc_count;
+	bool			hc_mode_flag;
+	/* copy form msm8976_pmic end */
+};
+#endif
+int plugin_update(struct smb_charger *chg);
+int op_set_prop_otg_switch(struct smb_charger *chg,
+				bool enalbe);
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
 int smblib_masked_write(struct smb_charger *chg, u16 addr, u8 mask, u8 val);
@@ -697,6 +956,10 @@ int smblib_get_prop_input_current_limited(struct smb_charger *chg,
 				int *val);
 int smblib_get_prop_batt_iterm(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblib_get_prop_batt_temp(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_set_prop_batt_temp(struct smb_charger *chg,
+				const union power_supply_propval *val);
 int smblib_set_prop_input_suspend(struct smb_charger *chg,
 				  const union power_supply_propval *val);
 int smblib_set_prop_batt_capacity(struct smb_charger *chg,
@@ -841,5 +1104,11 @@ int smblib_get_prop_voltage_wls_output(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_dc_voltage_now(struct smb_charger *chg,
 				union power_supply_propval *val);
+int get_skin_temp(struct smb_charger *chg);
 
+#ifdef OPLUS_FEATURE_USB_PORT_PROTECT
+void op_disconnect_vbus(struct smb_charger *chg, bool enable);
+extern void switch_mode_to_normal(void);
+extern void mcu_en_reset(void);
+#endif
 #endif /* __SMB5_CHARGER_H */

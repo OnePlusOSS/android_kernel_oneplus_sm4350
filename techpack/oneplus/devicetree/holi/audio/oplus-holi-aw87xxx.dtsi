@@ -1,0 +1,22 @@
+/*
+ * add codec aw87xxx dtsi.
+ */
+
+&qupv3_se10_i2c {
+/* AWINIC AW87XXX Smart K PA */
+	aw87xxx_pa_58@58 {
+		compatible = "awinic,aw87xxx_pa_58";
+		reg = <0x58>;
+		reset-gpio = <&tlmm 11 0>;
+		pa-channel = < 0 >;
+		/* actflag-gain-array: off music voice fm rcv */
+		actflag-gain-array = < 0x00 0x08 0x08 0x08 0x00 >;
+		gain-reg-addr = <0x06>;
+		/*actflag-auto-run;*/
+		monitor-flag = <1>;
+		monitor-timer-val = <3000>;
+		monitor-timer-count-max = <5>;
+		status = "okay";
+	};
+/* AWINIC AW87XXX Smart K PA End */
+};

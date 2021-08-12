@@ -174,10 +174,16 @@ int kswapd_threads_current = DEF_KSWAPD_THREADS_PER_NODE;
 #define prefetchw_prev_lru_page(_page, _base, _field) do { } while (0)
 #endif
 
+/* set direct swapiness rate ,higher means more swap */
+#ifdef CONFIG_DIRECT_SWAPPINESS
+int vm_swappiness = 100;
+int vm_direct_swapiness = 60;
+#else
 /*
  * From 0 .. 100.  Higher means more swappy.
  */
 int vm_swappiness = 60;
+#endif
 /*
  * The total number of pages which are beyond the high watermark within all
  * zones.
@@ -1589,6 +1595,61 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 	return ret;
 }
 
+#ifdef CONFIG_MEMEX_STANDALONE
+unsigned long coretech_reclaim_pagelist(struct list_head *page_list,
+		struct vm_area_struct *vma, void *sc)
+{
+	struct scan_control sc_t = {
+		.gfp_mask = GFP_KERNEL,
+		.priority = DEF_PRIORITY,
+		.may_writepage = 1,
+		.may_unmap = 1,
+		.may_swap = 1,
+		.target_vma = vma,
+	};
+	struct reclaim_stat dummy_stat;
+
+	unsigned long nr_reclaimed;
+	struct page *page;
+
+	if (!sc)
+		sc = &sc_t;
+
+	list_for_each_entry(page, page_list, lru) {
+		ClearPageActive(page);
+	}
+
+	nr_reclaimed = shrink_page_list(page_list, NULL,
+			(struct scan_control *)sc,
+			TTU_IGNORE_ACCESS, &dummy_stat, true);
+
+	while (!list_empty(page_list)) {
+		page = lru_to_page(page_list);
+		list_del(&page->lru);
+		dec_node_page_state(page, NR_ISOLATED_ANON +
+				page_is_file_cache(page));
+		putback_lru_page(page);
+	}
+
+	return nr_reclaimed;
+}
+
+unsigned long swapout_to_zram(struct list_head *page_list,
+	struct vm_area_struct *vma)
+{
+	struct scan_control sc = {
+		.gfp_mask = GFP_KERNEL,
+		.priority = DEF_PRIORITY,
+		.may_writepage = 1,
+		.may_unmap = 1,
+		.may_swap = 1,
+		.target_vma = vma,
+	};
+
+	return coretech_reclaim_pagelist(page_list, vma, &sc);
+}
+#endif
+
 #ifdef CONFIG_PROCESS_RECLAIM
 unsigned long reclaim_pages_from_list(struct list_head *page_list,
 					struct vm_area_struct *vma)
@@ -2378,6 +2439,11 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	unsigned long anon, file;
 	unsigned long ap, fp;
 	enum lru_list lru;
+
+#ifdef CONFIG_DIRECT_SWAPPINESS
+	if (!current_is_kswapd())
+		swappiness = vm_direct_swapiness;
+#endif
 
 	/* If we have no swap space, do not bother scanning anon pages. */
 	if (!sc->may_swap || mem_cgroup_get_nr_swap_pages(memcg) <= 0) {
@@ -3942,6 +4008,29 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 	finish_wait(&pgdat->kswapd_wait, &wait);
 }
 
+#ifdef CONFIG_ARCH_HOLI
+/* v-danshuaixin@oppo.com 2021/3/15 disable aux kswapd migrate to cpu6 and cpu 7 */
+extern long sched_setaffinity(pid_t pid, const struct cpumask *in_mask);
+static inline int set_thread_affinity_littlecore(struct task_struct *tsk)
+{
+	int ret;
+	struct cpumask mask;
+
+	cpumask_clear(&mask);
+
+	cpumask_set_cpu(0, &mask);
+	cpumask_set_cpu(1, &mask);
+	cpumask_set_cpu(2, &mask);
+	cpumask_set_cpu(3, &mask);
+	cpumask_set_cpu(4, &mask);
+	cpumask_set_cpu(5, &mask);
+
+	ret = sched_setaffinity(tsk->pid, &mask);
+
+	return ret;
+}
+#endif /* CONFIG_ARCH_HOLI */
+
 /*
  * The background pageout daemon, started as a kernel thread
  * from the init process.
@@ -3965,6 +4054,11 @@ static int kswapd(void *p)
 
 	if (!cpumask_empty(cpumask))
 		set_cpus_allowed_ptr(tsk, cpumask);
+
+#ifdef CONFIG_ARCH_HOLI
+/* v-danshuaixin@oppo.com 2021/3/15 disable aux kswapd migrate to cpu6 and cpu 7 */
+	set_thread_affinity_littlecore(current);
+#endif /* CONFIG_ARCH_HOLI */
 
 	/*
 	 * Tell the memory management that we're a "memory allocator",

@@ -1375,6 +1375,9 @@ int mmc_attach_sd(struct mmc_host *host)
 {
 	int err;
 	u32 ocr, rocr;
+#if CONFIG_ARCH_HOLI
+	int retries = 5;
+#endif
 
 	WARN_ON(!host->claimed);
 
@@ -1416,9 +1419,31 @@ int mmc_attach_sd(struct mmc_host *host)
 	/*
 	 * Detect and init the card.
 	 */
+#if CONFIG_ARCH_HOLI
+	while (retries) {
+		pr_err("%s: %s: try %d times\n", mmc_hostname(host), __func__, (6-retries));
+		err = mmc_sd_init_card(host, rocr, NULL);
+		if (err) {
+			retries--;
+			mmc_power_off(host);
+			usleep_range(5000, 5500);
+			mmc_power_up(host, rocr);
+			mmc_select_voltage(host, rocr);
+			continue;
+		}
+		break;
+	}
+
+	if (!retries) {
+		printk(KERN_ERR "%s: mmc_sd_init_card() failure (err = %d)\n",
+				mmc_hostname(host), err);
+				goto err;
+	}
+#else
 	err = mmc_sd_init_card(host, rocr, NULL);
 	if (err)
 		goto err;
+#endif
 
 	mmc_release_host(host);
 	err = mmc_add_card(host->card);

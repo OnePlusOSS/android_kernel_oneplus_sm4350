@@ -31,6 +31,10 @@
 #include <linux/of.h>
 #include <asm/current.h>
 #include <linux/timer.h>
+#if IS_ENABLED(TECHPACK_ONEPLUS)
+#include <linux/oem/boot_mode.h>
+#include <linux/oem/op_misc.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_msm_ssr_event.h>
@@ -191,6 +195,7 @@ struct subsys_device {
 	int id;
 	int restart_level;
 	int crash_count;
+	char crash_reason[256];
 	struct subsys_soc_restart_order *restart_order;
 	bool do_ramdump_on_put;
 	struct cdev char_dev;
@@ -221,6 +226,13 @@ static ssize_t name_show(struct device *dev, struct device_attribute *attr,
 	return snprintf(buf, PAGE_SIZE, "%s\n", to_subsys(dev)->desc->name);
 }
 static DEVICE_ATTR_RO(name);
+
+static ssize_t crash_reason_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", to_subsys(dev)->crash_reason);
+}
+static DEVICE_ATTR_RO(crash_reason);
 
 static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
@@ -342,10 +354,44 @@ static void subsys_set_state(struct subsys_device *subsys,
 	spin_unlock_irqrestore(&subsys->track.s_lock, flags);
 }
 
+static void subsys_send_uevent_notify(struct subsys_desc *desc,	int crash_count)
+{
+	char *envp[4];
+	struct subsys_device *dev;
+
+	if (!desc)
+		return;
+
+	dev = find_subsys_device(desc->name);
+	if (!dev)
+		return;
+
+	envp[0] = kasprintf(GFP_KERNEL, "SUBSYSTEM=%s", desc->name);
+	envp[1] = kasprintf(GFP_KERNEL, "CRASHCOUNT=%d", crash_count);
+	envp[2] = kasprintf(GFP_KERNEL, "CRASHREASON=%s", dev->crash_reason);
+	envp[3] = NULL;
+	kobject_uevent_env(&desc->dev->kobj, KOBJ_CHANGE, envp);
+	pr_err("%s %s %s\n", envp[0], envp[1], envp[2]);
+	kfree(envp[2]);
+	kfree(envp[1]);
+	kfree(envp[0]);
+}
+
+void subsys_store_crash_reason(struct subsys_device *dev, char *reason)
+{
+	if (dev == NULL)
+		return;
+
+	if (reason != NULL)
+		strlcpy(dev->crash_reason, reason, sizeof(dev->crash_reason));
+}
+EXPORT_SYMBOL(subsys_store_crash_reason);
+
 static struct attribute *subsys_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_state.attr,
 	&dev_attr_crash_count.attr,
+	&dev_attr_crash_reason.attr,
 	&dev_attr_restart_level.attr,
 	&dev_attr_firmware_name.attr,
 	&dev_attr_system_debug.attr,
@@ -644,6 +690,8 @@ static int subsystem_shutdown(struct subsys_device *dev, void *data)
 	}
 	dev->crash_count++;
 	subsys_set_state(dev, SUBSYS_OFFLINE);
+
+	subsys_send_uevent_notify(dev->desc, dev->crash_count);
 
 	return 0;
 }
@@ -1097,8 +1145,17 @@ int subsystem_restart_dev(struct subsys_device *dev)
 		__subsystem_restart_dev(dev);
 		break;
 	case RESET_SOC:
-		__pm_stay_awake(dev->ssr_wlock);
-		schedule_work(&dev->device_restart_work);
+		#if IS_ENABLED(CONFIG_OEM_BOOT_MODE)
+		/*small board absent ignore reset soc*/
+		if (get_small_board_1_absent() == 1) {
+			pr_warn("small board absent restart %s\n", name);
+			__subsystem_restart_dev(dev);
+		} else
+		#endif
+		{
+			__pm_stay_awake(dev->ssr_wlock);
+			schedule_work(&dev->device_restart_work);
+		}
 		return 0;
 	default:
 		panic("subsys-restart: Unknown restart level!\n");
@@ -1619,7 +1676,9 @@ static int __init subsys_restart_init(void)
 	ret = atomic_notifier_chain_register(&panic_notifier_list, &panic_nb);
 	if (ret)
 		goto err_soc;
-
+#if IS_ENABLED(TECHPACK_ONEPLUS)
+	oem_restart_modem_init();
+#endif
 	return 0;
 
 err_soc:
@@ -1640,6 +1699,10 @@ static void __exit subsys_restart_exit(void)
 	destroy_workqueue(ssr_wq);
 }
 module_exit(subsys_restart_exit);
+
+#if IS_ENABLED(TECHPACK_ONEPLUS)
+#include "oem_subsystem_restart.c"
+#endif
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Subsystem Restart Driver");
 MODULE_LICENSE("GPL v2");

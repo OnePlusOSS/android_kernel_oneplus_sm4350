@@ -1,0 +1,9 @@
+
+#source "drivers/input/touchscreen/oplus_touchscreen/Novatek/NT36672/Kconfig"
+#source "drivers/input/touchscreen/oplus_touchscreen/Novatek/NT36525/Kconfig"
+#source "drivers/input/touchscreen/oplus_touchscreen/Novatek/NT36672_noflash/Kconfig"
+#source "drivers/input/touchscreen/oplus_touchscreen/Novatek/NT36525_noflash/Kconfig"
+
+source "techpack/oneplus/input/oplus_touchscreen/Novatek/NT36672C_noflash/Kconfig"
+
+

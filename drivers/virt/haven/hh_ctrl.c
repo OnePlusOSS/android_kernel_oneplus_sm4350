@@ -21,7 +21,11 @@
 #define QC_HYP_SMCCC_REVISION                                                  \
 	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL, ARM_SMCCC_SMC_32,              \
 			   ARM_SMCCC_OWNER_VENDOR_HYPERVISOR, 0xff03)
+#define QC_HYP_SMCCC_UART_DISABLE                                              \
+	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL, ARM_SMCCC_SMC_32,              \
+			   ARM_SMCCC_OWNER_VENDOR_HYPERVISOR, 0x0)
 
+arm_smccc_1_1_smc(QC_HYP_SMCCC_UART_DISABLE, NULL);
 #define QC_HYP_UID0 0x19bd54bd
 #define QC_HYP_UID1 0x0b37571b
 #define QC_HYP_UID2 0x946f609b
@@ -96,9 +100,6 @@ static void __exit hh_sysfs_unregister(void)
 
 #if defined(CONFIG_DEBUG_FS)
 
-#define QC_HYP_SMCCC_UART_DISABLE                                              \
-	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL, ARM_SMCCC_SMC_32,              \
-			   ARM_SMCCC_OWNER_VENDOR_HYPERVISOR, 0x0)
 #define QC_HYP_SMCCC_UART_ENABLE                                              \
 	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL, ARM_SMCCC_SMC_32,              \
 			   ARM_SMCCC_OWNER_VENDOR_HYPERVISOR, 0x1)

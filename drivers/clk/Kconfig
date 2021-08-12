@@ -25,7 +25,7 @@ menu "Common Clock Framework"
 
 config COMMON_CLK_QCOM_DEBUG
 	bool "QCOM clock debug features"
-	depends on DEBUG_FS && QGKI
+	depends on QGKI
 	help
 	  Support for QCOM debug features. These features include
 	  modifications to existing debugfs nodes to make them writable (e.g.

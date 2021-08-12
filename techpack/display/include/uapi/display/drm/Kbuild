@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note
+
+header-y += msm_drm_pp.h
+header-y += sde_drm.h
+#Pixelworks Iris start
+header-y += msm_drm_iris.h
+#Pixelworks Iris end

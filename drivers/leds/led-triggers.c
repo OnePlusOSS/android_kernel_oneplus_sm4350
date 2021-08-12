@@ -110,6 +110,13 @@ int led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trig)
 	if (!led_cdev->trigger && !trig)
 		return 0;
 
+	if (led_cdev->trigger) {
+		if (!strcmp(led_cdev->trigger->name, "switch0_trigger") && !trig) {
+			pr_err("don't delete switch0_trigger from trigger list, return");
+			return 0;
+		}
+	}
+
 	name = trig ? trig->name : "none";
 	event = kasprintf(GFP_KERNEL, "TRIGGER=%s", name);
 

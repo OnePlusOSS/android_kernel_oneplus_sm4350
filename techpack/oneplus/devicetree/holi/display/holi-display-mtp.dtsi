@@ -1,0 +1,71 @@
+
+#include "dsi-panel-oplus-nt36672c-dsjm-fhd-plus-90fps-video.dtsi"
+#include "dsi-panel-oplus-nt36672c-tm-fhd-plus-90fps-video.dtsi"
+
+&soc {
+	/*
+	dsi_panel_pwr_supply_labibb: dsi_panel_pwr_supply_labibb {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddio";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <62000>;
+			qcom,supply-disable-load = <80>;
+			qcom,supply-post-on-sleep = <20>;
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "lab";
+			qcom,supply-min-voltage = <4600000>;
+			qcom,supply-max-voltage = <6000000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+		};
+
+		qcom,panel-supply-entry@2 {
+			reg = <2>;
+			qcom,supply-name = "ibb";
+			qcom,supply-min-voltage = <4600000>;
+			qcom,supply-max-voltage = <6000000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-post-on-sleep = <20>;
+		};
+	};
+	*/
+	qcom,dsi-display-primary {
+		lab-supply = <&lcdb_ldo_vreg>;
+		ibb-supply = <&lcdb_ncp_vreg>;
+		qcom,dsi-default-panel = <&dsi_nt36672c_tm_video>;
+	};
+	
+	qcom,mdss_mdp@5e00000 {
+		clock-rate = <0 0 0 0 0 300000000 19200000 300000000 200000000>;
+		connectors = <&smmu_sde_unsec &smmu_sde_sec &sde_dsi>;
+	};
+	/delete-node/ pm6150a_amoled;
+};
+
+&sde_dsi {
+	qcom,dsi-default-panel = <&dsi_nt36672c_tm_video>;
+};
+
+&pm6150a_amoled {
+	status = "disable";
+};
+
+&pm6150l_lcdb {
+	status = "ok";
+};
+&pm6150l_wled {
+	status = "ok";
+	qcom,fs-current-limit = <22500>;
+	qcom,string-cfg = <3>;
+        qcom,cabc-sel = <1>;
+};
+//#endif /*OPLUS_BUG_STABILITY*/

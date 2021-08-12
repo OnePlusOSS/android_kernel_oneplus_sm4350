@@ -4444,6 +4444,9 @@ static int gcc_holi_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x7900c, BIT(18), BIT(18));
 	regmap_update_bits(regmap, 0x7900c, BIT(25), BIT(25));
 
+	/* Disable RCG-Lite feature for Venus Video clock */
+	regmap_update_bits(regmap, 0x58064, BIT(16), BIT(16));
+
 	clk_fabia_pll_configure(&gpll10, regmap, &gpll10_config);
 	clk_fabia_pll_configure(&gpll11, regmap, &gpll11_config);
 	clk_fabia_pll_configure(&gpll8, regmap, &gpll8_config);

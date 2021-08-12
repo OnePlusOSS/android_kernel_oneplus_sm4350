@@ -1,0 +1,3 @@
+/* DTB: Platform related generic modifications */
+#include "../../../../arch/arm64/boot/dts/vendor/qcom/holi.dtsi"
+

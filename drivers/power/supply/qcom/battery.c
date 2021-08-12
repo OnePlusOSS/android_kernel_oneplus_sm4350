@@ -26,6 +26,7 @@
 #include <dt-bindings/iio/qti_power_supply_iio.h>
 #include "battery.h"
 #include "smb5-iio.h"
+#include "../../oplus/oplus_charger.h"
 
 #define DRV_MAJOR_VERSION	1
 #define DRV_MINOR_VERSION	0
@@ -114,9 +115,10 @@ struct pl_data {
 
 static struct pl_data *the_chip;
 
+/*
 enum print_reason {
 	PR_PARALLEL	= BIT(0),
-};
+};*/
 
 enum {
 	AICL_RERUN_WA_BIT	= BIT(0),
@@ -169,6 +171,8 @@ static const char * const bat_smb_parallel_ext_iio_chan[] = {
 	[BAT_SMB_PARALLEL_VOLTAGE_MAX] = "pl_voltage_max",
 	[BAT_SMB_PARALLEL_CHARGE_TYPE] = "pl_charge_type",
 };
+
+extern struct oplus_chg_chip *g_oplus_chip;
 
 /*********
  * HELPER*
@@ -586,12 +590,16 @@ static ssize_t slave_pct_store(struct class *c, struct class_attribute *attr,
 	if (kstrtoul(ubuf, 10, &val))
 		return -EINVAL;
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
+/*LiYue@BSP.CHG.Basic, 2020/11/05, modify for charging*/
 	chip->slave_pct = val;
+#else
+	chip->slave_pct = 50;
+#endif
 
 	rc = validate_parallel_icl(chip, &disable);
 	if (rc < 0)
 		return rc;
-
 	vote(chip->pl_disable_votable, ICL_LIMIT_VOTER, disable, 0);
 	rerun_election(chip->fcc_votable);
 	rerun_election(chip->fv_votable);
@@ -759,6 +767,26 @@ static void get_fcc_split(struct pl_data *chip, int total_ua,
 		if (chip->main_fcc_max)
 			*master_ua = min(*master_ua, chip->main_fcc_max);
 	}
+
+	if (g_oplus_chip->limits.input_current_limit > 1500) {
+		if (g_oplus_chip->limits.charge_current_limit > 2000 && g_oplus_chip->charger_volt > 7500) {
+			*slave_ua = ((*master_ua + *slave_ua) * 50) / 100;
+			*master_ua = *slave_ua;
+		} else {
+			*master_ua = *master_ua + *slave_ua;
+			*slave_ua = 0;
+		}
+	} else {
+		*master_ua = *master_ua + *slave_ua;
+		*slave_ua = 0;
+	}
+#ifdef CONFIG_CHARGER_BQ25600_SLAVE
+	if (master_debug_fcc || slave_debug_fcc) {
+		*master_ua = master_debug_fcc;
+		*slave_ua = slave_debug_fcc;
+	}
+#endif
+	pl_dbg(chip, PR_PARALLEL, "[OPLUS_CHG][BATTERY] master_ma= %d, slave_ma = %d\n", *master_ua/1000, *slave_ua/1000);
 }
 
 static void get_main_fcc_config(struct pl_data *chip, int *total_fcc)
@@ -939,7 +967,11 @@ static void pl_taper_work(struct work_struct *work)
 			get_fcc_split(chip, total_fcc_ua, &master_fcc_ua,
 					&slave_fcc_ua);
 			if (slave_fcc_ua <= MINIMUM_PARALLEL_FCC_UA) {
+#ifndef CONFIG_CHARGER_BQ25600_SLAVE
 				pl_dbg(chip, PR_PARALLEL, "terminating: parallel's share is low\n");
+#else
+				printk(KERN_ERR "[OPLUS_CHG][BATTEY]%s: terminating: parallel's share is low  DISABLE PL\n", __func__);
+#endif
 				vote(chip->pl_disable_votable, TAPER_END_VOTER,
 						true, 0);
 			} else {
@@ -1363,7 +1395,9 @@ static int usb_icl_vote_callback(struct votable *votable, void *data,
 	 * ensure that all the input current limit gets assigned to the main
 	 * charger.
 	 */
-	vote(chip->pl_disable_votable, ICL_CHANGE_VOTER, true, 0);
+#ifndef CONFIG_CHARGER_BQ25600_SLAVE
+		vote(chip->pl_disable_votable, ICL_CHANGE_VOTER, true, 0);
+#endif
 
 	/*
 	 * if (ICL < 1400)
@@ -1388,6 +1422,12 @@ static int usb_icl_vote_callback(struct votable *votable, void *data,
 		pr_err("Couldn't get aicl settled value rc=%d\n", rc);
 		return rc;
 	}
+	rc = chip->chg_param->iio_read(chip->dev,
+	PSY_IIO_CONSTANT_CHARGE_CURRENT_MAX, &val);
+	if (rc < 0) {
+		pr_err("Couldn't get aicl settled value rc=%d\n", rc);
+		return rc;
+	}
 
 	/* rerun AICL if new ICL is above settled ICL */
 	if (icl_ua > val)
@@ -1408,7 +1448,9 @@ static int usb_icl_vote_callback(struct votable *votable, void *data,
 	if (rc < 0)
 		pr_err("Couldn't set main current_max, rc=%d\n", rc);
 
+#ifndef CONFIG_CHARGER_BQ25600_SLAVE
 	vote(chip->pl_disable_votable, ICL_CHANGE_VOTER, false, 0);
+#endif
 
 	/* Configure ILIM based on AICL result only if input mode is USBMID */
 	if (cp_get_parallel_mode(chip, PARALLEL_INPUT_MODE)
@@ -1453,6 +1495,9 @@ static int pl_disable_vote_callback(struct votable *votable,
 	int rc = 0, cp_ilim;
 	bool disable = false;
 
+#ifdef CONFIG_CHARGER_BQ25600_SLAVE
+	pr_debug("[OPLUS_CHG][BATTEY]%s: ENTER  pl_disable = %d\n", __func__, pl_disable);
+#endif
 	if (!is_batt_available(chip))
 		return -ENODEV;
 
@@ -1488,7 +1533,7 @@ static int pl_disable_vote_callback(struct votable *votable,
 	}
 
 	total_fcc_ua = get_effective_result_locked(chip->fcc_votable);
-
+	//pl_disable = 0;//force slave charge
 	if (chip->pl_mode != QTI_POWER_SUPPLY_PL_NONE && !pl_disable) {
 		rc = validate_parallel_icl(chip, &disable);
 		if (rc < 0)
@@ -1535,6 +1580,18 @@ static int pl_disable_vote_callback(struct votable *votable,
 			 * (Also handles parallel disable case)
 			 *	Set slave ICL then main FCC.
 			 */
+
+#ifdef CONFIG_CHARGER_BQ25600_SLAVE
+			vote(chip->fcc_main_votable, MAIN_FCC_VOTER, true, master_fcc_ua);
+			pval.intval = slave_fcc_ua;
+			rc = battery_write_iio_prop(chip, SMB_PARALLEL,
+					BAT_SMB_PARALLEL_CONSTANT_CHARGE_CURRENT_MAX,
+					pval.intval);
+			if (rc < 0) {
+				pr_err("Couldn't set parallel fcc, rc=%d\n", rc);
+				return rc;
+			}
+#else
 			if (slave_fcc_ua > chip->slave_fcc_ua) {
 				vote(chip->fcc_main_votable, MAIN_FCC_VOTER,
 							true, master_fcc_ua);
@@ -1562,7 +1619,7 @@ static int pl_disable_vote_callback(struct votable *votable,
 				vote(chip->fcc_main_votable, MAIN_FCC_VOTER,
 							true, master_fcc_ua);
 			}
-
+#endif
 			/*
 			 * Enable will be called with a valid pl_psy always. The
 			 * PARALLEL_PSY_VOTER keeps it disabled unless a pl_psy
@@ -1657,7 +1714,10 @@ static int pl_disable_vote_callback(struct votable *votable,
 
 	pl_dbg(chip, PR_PARALLEL, "parallel charging %s\n",
 		   pl_disable ? "disabled" : "enabled");
-
+#ifdef CONFIG_CHARGER_BQ25600_SLAVE
+	g_oplus_chip->bq_enable = !pl_disable;
+	pr_debug("[OPLUS_CHG][BATTEY]%s: END  parallel charging %s\n", __func__, pl_disable ? "disabled" : "enabled");
+#endif
 	return 0;
 }
 
@@ -1703,8 +1763,10 @@ static bool is_parallel_available(struct pl_data *chip)
 			if (rc != -EPROBE_DEFER) {
 				dev_err(chip->dev, "Failed to get channels, %d\n",
 					rc);
+#ifndef CONFIG_CHARGER_BQ25600_SLAVE
 				chip->iio_chan_list_smb_parallel =
 				ERR_PTR(-EINVAL);
+#endif
 			}
 			return false;
 		}
@@ -1893,7 +1955,6 @@ static void handle_settled_icl_change(struct pl_data *chip)
 			rc = validate_parallel_icl(chip, &disable);
 			if (rc < 0)
 				return;
-
 			vote(chip->pl_disable_votable, ICL_LIMIT_VOTER,
 						disable, 0);
 			if (!get_effective_result_locked(
@@ -1981,7 +2042,11 @@ static void status_change_work(struct work_struct *work)
 	 * re-run election for FCC/FV/ICL to ensure all
 	 * votes are reflected on hardware
 	 */
+
+#ifndef CONFIG_CHARGER_BQ25600_SLAVE
 	rerun_election(chip->usb_icl_votable);
+#endif
+
 	rerun_election(chip->fcc_votable);
 	rerun_election(chip->fv_votable);
 

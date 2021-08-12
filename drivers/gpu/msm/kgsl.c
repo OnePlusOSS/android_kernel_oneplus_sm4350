@@ -1955,8 +1955,7 @@ long kgsl_ioctl_gpu_aux_command(struct kgsl_device_private *dev_priv,
 	if (param->flags & KGSL_GPU_AUX_COMMAND_SYNC)
 		count++;
 
-	drawobjs = kvcalloc(count, sizeof(*drawobjs),
-		GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN);
+	drawobjs = kvcalloc(count, sizeof(*drawobjs), GFP_KERNEL);
 
 	if (!drawobjs) {
 		kgsl_context_put(context);
@@ -2401,8 +2400,7 @@ static int memdesc_sg_virt(struct kgsl_memdesc *memdesc, unsigned long useraddr)
 	if (sglen == 0 || sglen >= LONG_MAX)
 		return -EINVAL;
 
-	pages = kvcalloc(sglen, sizeof(*pages),
-		GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN);
+	pages = kvcalloc(sglen, sizeof(*pages), GFP_KERNEL);
 	if (pages == NULL)
 		return -ENOMEM;
 
@@ -4004,6 +4002,33 @@ static unsigned long get_svm_unmapped_area(struct file *file,
 	return -ENOMEM;
 }
 
+static void kgsl_send_uevent_notify(struct kgsl_device *desc, char *comm,
+			unsigned long len, unsigned long total_vm,
+			unsigned long largest_gap_cpu, unsigned long largest_gap_gpu)
+{
+	char *envp[7];
+	char *title = "GPU_VM";
+
+	if (!desc)
+		return;
+	envp[0] = kasprintf(GFP_KERNEL, "title=%s", title);
+	envp[1] = kasprintf(GFP_KERNEL, "COMM=%s", comm);
+	envp[2] = kasprintf(GFP_KERNEL, "LEN=%lu", len);
+	envp[3] = kasprintf(GFP_KERNEL, "TOTAL_VM=%lu", total_vm);
+	envp[4] = kasprintf(GFP_KERNEL, "LARGEST_GAP_CPU=%lu", largest_gap_cpu);
+	envp[5] = kasprintf(GFP_KERNEL, "LARGEST_GAP_GPU=%lu", largest_gap_gpu);
+	envp[6] = NULL;
+	kobject_uevent_env(&desc->dev->kobj, KOBJ_CHANGE, envp);
+	kfree(envp[0]);
+	kfree(envp[1]);
+	kfree(envp[2]);
+	kfree(envp[3]);
+	kfree(envp[4]);
+	kfree(envp[5]);
+}
+
+static int current_pid = -1;
+
 static unsigned long
 kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 			unsigned long len, unsigned long pgoff,
@@ -4038,11 +4063,34 @@ kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 					       (int) val);
 	} else {
 		val = get_svm_unmapped_area(file, entry, addr, len, flags);
-		if (IS_ERR_VALUE(val))
+		if (IS_ERR_VALUE(val)) {
+			struct vm_area_struct *vma;
+			struct mm_struct *mm = current->mm;
+			unsigned long largest_gap_cpu = UINT_MAX;
+			unsigned long largest_gap_gpu = UINT_MAX;
+
 			dev_err_ratelimited(device->dev,
 					       "_get_svm_area: pid %d addr %lx pgoff %lx len %ld failed error %d\n",
 					       pid_nr(private->pid), addr, pgoff, len,
 					       (int) val);
+
+			if (!RB_EMPTY_ROOT(&mm->mm_rb)) {
+				vma = rb_entry(mm->mm_rb.rb_node, struct vm_area_struct, vm_rb);
+				largest_gap_cpu = vma->rb_subtree_gap;
+				//largest_gap_gpu = vma->rb_glfragment_gap;
+				largest_gap_gpu = vma->rb_subtree_gap;
+			}
+			if (pid_nr(private->pid) != current_pid) {
+				current_pid = pid_nr(private->pid);
+				kgsl_send_uevent_notify(device, current->group_leader->comm,
+					len, mm->total_vm, largest_gap_cpu, largest_gap_gpu);
+			}
+
+			dev_err_ratelimited(device->dev,
+				"kgsl additional info: %s VmSize %lu MaxGapCpu %lu MaxGapGpu %lu\n"
+				, current->group_leader->comm, mm->total_vm, largest_gap_cpu
+				, largest_gap_gpu);
+		}
 	}
 
 	kgsl_mem_entry_put(entry);

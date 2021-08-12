@@ -300,3 +300,11 @@ extern unsigned long task_statm(struct mm_struct *,
 				unsigned long *, unsigned long *,
 				unsigned long *, unsigned long *);
 extern void task_mem(struct seq_file *, struct mm_struct *);
+
+/*
+ * trace lost ram
+ */
+#if IS_ENABLED(CONFIG_QGKI)
+extern int read_fastrpc_usage(void);
+extern int kgsl_pool_size_total(void);
+#endif

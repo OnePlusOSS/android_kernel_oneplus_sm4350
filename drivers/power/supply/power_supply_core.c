@@ -23,6 +23,10 @@
 #include <linux/thermal.h>
 #include "power_supply.h"
 
+#ifdef CONFIG_HOUSTON
+#include <oneplus/houston/houston_helper.h>
+#endif
+
 /* exported for the APM Power driver, APM emulation */
 struct class *power_supply_class;
 EXPORT_SYMBOL_GPL(power_supply_class);
@@ -97,6 +101,9 @@ static void power_supply_changed_work(struct work_struct *work)
 		power_supply_update_leds(psy);
 		atomic_notifier_call_chain(&power_supply_notifier,
 				PSY_EVENT_PROP_CHANGED, psy);
+#ifdef CONFIG_F2FS_OF2FS
+		f2fs_battery_notifier_call_chain(PSY_EVENT_PROP_CHANGED, psy);
+#endif
 		kobject_uevent(&psy->dev.kobj, KOBJ_CHANGE);
 		spin_lock_irqsave(&psy->changed_lock, flags);
 	}
@@ -191,7 +198,7 @@ static int power_supply_populate_supplied_from(struct power_supply *psy)
 	int error;
 
 	error = class_for_each_device(power_supply_class, NULL, psy,
-				      __power_supply_populate_supplied_from);
+		__power_supply_populate_supplied_from);
 
 	dev_dbg(&psy->dev, "%s %d\n", __func__, error);
 
@@ -409,7 +416,7 @@ int power_supply_set_input_current_limit_from_supplier(struct power_supply *psy)
 	 * max-current.
 	 */
 	curr = class_for_each_device(power_supply_class, NULL, psy,
-				      __power_supply_get_supplier_max_current);
+			__power_supply_get_supplier_max_current);
 	if (curr <= 0)
 		return (curr == 0) ? -ENODEV : curr;
 
@@ -1161,6 +1168,10 @@ __power_supply_register(struct device *parent,
 	queue_delayed_work(system_power_efficient_wq,
 			   &psy->deferred_register_work,
 			   POWER_SUPPLY_DEFERRED_REGISTER_TIME);
+
+#ifdef CONFIG_HOUSTON
+	ht_register_power_supply(psy);
+#endif
 
 	return psy;
 

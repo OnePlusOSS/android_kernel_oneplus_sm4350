@@ -69,17 +69,14 @@ config SMB1355_SLAVE_CHARGER
 	  The driver reports the charger status via the power supply framework.
 	  A charger status change triggers an IRQ via the device STAT pin.
 
-config SMB1390_CHARGE_PUMP_PSY
-	tristate "SMB1390 power supply framework based driver"
-	depends on MFD_I2C_PMIC
+config CHARGER_BQ25600_SLAVE
+	tristate "BQ25600 Slave Battery Charger"
+	depends on MFD_I2C_PMIC && IIO
 	help
-	  Say Y to include support for SMB1390 Charge Pump driver based on
-	  power supply framework.
-	  SMB1390 is a div2 charge pump capable of delivering 6A charge current
-	  with very high efficiency. It can work either as 2s to 1s pre-regulator
-	  or as a companion charger when paired with Qualcomm Technologies, Inc.’s
-	  family of standalone chargers to enable a high current, low profile
-	  Li+ battery charging system.
+	  Say Y to include support for BQ25600 Battery Charger.
+	  The driver supports charger enable/disable.
+	  The driver reports the charger status via the power supply framework.
+	  A charger status change triggers an IRQ via the device STAT pin.
 
 config SMB1351_USB_CHARGER
 	tristate "smb1351 usb charger (with VBUS detection)"
@@ -98,7 +95,4 @@ config SMB358_CHARGER
 	  Say Y to include support for SMB358 Battery Charger.
 	  SMB358 is a single path switching mode charger capable of charging
 	  the battery with 2Amps of current.
-	  The driver supports charger enable/disable.
-	  The driver reports the charger status via the power supply framework.
-	  A charger status change triggers an IRQ via the device STAT pin.
 endif

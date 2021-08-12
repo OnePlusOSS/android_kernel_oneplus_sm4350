@@ -422,8 +422,8 @@ int smb5_iio_set_prop(struct smb_charger *chg, int channel, int val)
 		break;
 	case PSY_IIO_CONSTANT_CHARGE_CURRENT_MAX:
 		/* Adjust Main FCC for QC3.0 + SMB1390 */
-		rc = smblib_get_qc3_main_icl_offset(chg, &offset_ua);
-		if (rc < 0)
+		//rc = smblib_get_qc3_main_icl_offset(chg, &offset_ua);
+		//if (rc < 0)
 			offset_ua = 0;
 
 		rc = smblib_set_charge_param(chg, &chg->param.fcc,

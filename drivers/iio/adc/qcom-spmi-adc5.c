@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pmr735a.h>
 #include "qcom-vadc-common.h"
 
 #define ADC5_USR_REVISION1			0x0
@@ -242,6 +243,7 @@ static int adc5_read_voltage_data(struct adc5_chip *adc, u16 *data)
 {
 	int ret;
 	u8 rslt_lsb, rslt_msb;
+	struct adc5_channel_prop *prop = adc->chan_props;
 
 	ret = adc5_read(adc, ADC5_USR_DATA0, &rslt_lsb, sizeof(rslt_lsb));
 	if (ret)
@@ -257,8 +259,9 @@ static int adc5_read_voltage_data(struct adc5_chip *adc, u16 *data)
 		pr_err("Invalid data:0x%x\n", *data);
 		return -EINVAL;
 	}
-
-	pr_debug("voltage raw code:0x%x\n", *data);
+	if (prop->channel == 0x3)//PMR735A_ADC7_DIE_TEMP
+		pr_err("[adc_debug][%s] voltage raw code:0x%04x\n", __func__, *data);
+	//pr_debug("voltage raw code:0x%x\n", *data);
 
 	return 0;
 }
@@ -383,6 +386,9 @@ static int adc7_configure(struct adc5_chip *adc,
 
 	ret = adc5_write(adc, ADC5_USR_CONV_REQ, &conv_req, 1);
 
+	if (prop->channel == 0x3) //PMR735A_ADC7_DIE_TEMP
+		pr_err("[adc_debug] %s %d, 0x%x, 0x%x, 0x%x, 0x%x\n",
+				__func__, prop->sid, buf[0], buf[1], buf[2], buf[3]);
 	return ret;
 }
 
@@ -489,6 +495,9 @@ static int adc7_do_conversion(struct adc5_chip *adc,
 
 	ret = adc5_read_voltage_data(adc, data_volt);
 
+	if (prop->channel == 0x3)//PMR735A_ADC7_DIE_TEMP)
+		pr_err("[adc_debug] %s channel[0x%x], data_volt:%d\n",
+				__func__, prop->channel, (*data_volt));
 unlock:
 	mutex_unlock(&adc->lock);
 
@@ -551,6 +560,9 @@ static int adc7_read_raw(struct iio_dev *indio_dev,
 		if (ret)
 			return ret;
 
+		if (prop->channel == 0x3)//PMR735A_ADC7_DIE_TEMP
+			pr_err("[adc_debug] %s mask:%d, adc_code_volt:%d, adc_code_cur:%d, val:%d\n",
+						__func__, mask, adc_code_volt, adc_code_cur, (*val));
 		ret = qcom_adc5_hw_scale(prop->scale_fn_type,
 			&adc5_prescale_ratios[prop->prescale],
 			adc->data,
@@ -568,6 +580,10 @@ static int adc7_read_raw(struct iio_dev *indio_dev,
 			return ret;
 
 		*val = (int)adc_code_volt;
+
+		if (prop->channel == 0x3)//PMR735A_ADC7_DIE_TEMP
+			pr_err("[adc_debug] %s mask:%d, adc_code_volt:%d, adc_code_cur:%d, val:%d\n",
+						__func__, mask, adc_code_volt, adc_code_cur, (*val));
 		return IIO_VAL_INT;
 
 	default:
@@ -695,8 +711,12 @@ static const struct adc5_channels adc5_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
 	[ADC5_AMUX_THM2]	= ADC5_CHAN_TEMP("amux_thm2", 0,
 					SCALE_HW_CALIB_PM5_SMB_TEMP)
+
+	[ADC5_AMUX_THM4]	= ADC5_CHAN_TEMP("amux_thm4", 0,
+					SCALE_HW_CALIB_PM5_SMB_TEMP)
 	[ADC5_PARALLEL_ISENSE]	= ADC5_CHAN_VOLT("parallel_isense", 0,
 					SCALE_HW_CALIB_PM5_CUR)
+
 	[ADC5_GPIO1_100K_PU]	= ADC5_CHAN_TEMP("gpio1_100k_pu", 0,
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
 	[ADC5_GPIO2_100K_PU]	= ADC5_CHAN_TEMP("gpio2_100k_pu", 0,
@@ -705,6 +725,12 @@ static const struct adc5_channels adc5_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
 	[ADC5_GPIO4_100K_PU]	= ADC5_CHAN_TEMP("gpio4_100k_pu", 0,
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
+	[ADC5_GPIO2_30K_PU]	= ADC5_CHAN_TEMP("gpio2_30k_pu", 0,
+					SCALE_HW_CALIB_THERM_30K)
+	[ADC5_AMUX_THM3_30K_PU] = ADC5_CHAN_TEMP("conn_temp", 0,
+					SCALE_HW_CALIB_THERM_30K)
+	[ADC5_AMUX_THM4_30K_PU] = ADC5_CHAN_TEMP("usb_tem1_adc_v", 0,
+					SCALE_HW_CALIB_THERM_30K)
 };
 
 static const struct adc5_channels adc7_chans_pmic[ADC5_MAX_CHANNEL] = {
@@ -750,6 +776,11 @@ static const struct adc5_channels adc7_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
 	[ADC7_GPIO4_100K_PU]	= ADC5_CHAN_TEMP("gpio4_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+	/* bsp@2020.07.01, add usb connector temp */
+	[ADC7_AMUX_THM5_30K_PU]	= ADC5_CHAN_VOLT("gpio1_v", 0,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC7_GPIO2_30K_PU]	= ADC5_CHAN_VOLT("gpio3_v", 0,
+					SCALE_HW_CALIB_DEFAULT)
 };
 
 static const struct adc5_channels adc5_chans_rev2[ADC5_MAX_CHANNEL] = {

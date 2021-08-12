@@ -1,0 +1,8 @@
+&soc {
+	reg_test: reg_test {
+			  compatible = "reg_test";
+			  L6E-supply = <&L6E>;
+			  L10A-supply = <&L10A>;
+			  L11E-supply = <&L11E>;
+		  };
+};

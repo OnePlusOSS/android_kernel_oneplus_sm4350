@@ -950,7 +950,8 @@ EXPORT_SYMBOL(drm_mode_duplicate);
 static bool drm_mode_match_timings(const struct drm_display_mode *mode1,
 				   const struct drm_display_mode *mode2)
 {
-	return mode1->hdisplay == mode2->hdisplay &&
+	return drm_mode_vrefresh(mode1) == drm_mode_vrefresh(mode2) &&
+		mode1->hdisplay == mode2->hdisplay &&
 		mode1->hsync_start == mode2->hsync_start &&
 		mode1->hsync_end == mode2->hsync_end &&
 		mode1->htotal == mode2->htotal &&

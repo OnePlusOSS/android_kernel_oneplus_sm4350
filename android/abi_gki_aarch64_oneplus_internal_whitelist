@@ -1,0 +1,55 @@
+# List of symbols exported by ONEPLUS in-kernel drivers and used by external DLKMs
+# ONEPLUS internal whitelist
+[abi_whitelist]
+
+  kernel_accept
+  kernel_listen
+  regmap_exit
+  __regmap_init_i2c
+  devm_snd_soc_register_component
+  i2c_recover_bus
+  __cfi_slowpath_diag
+  __kfifo_alloc
+  __kfifo_in_r
+  __kfifo_len_r
+  __kfifo_out_r
+  __kfifo_to_user
+  device_remove_bin_file
+  devm_gpio_free
+  devm_gpiod_get
+  devm_gpiod_put
+  force_oem_console_setup
+  request_firmware_direct
+  defrag___rmqueue
+  extcon_dev_unregister
+  devm_extcon_dev_unregister
+  wakeup_source_add
+  strcat
+  commit_creds
+  round_jiffies_relative
+  simple_strtol
+  strncat
+  wakeup_source_remove
+  wakeup_source_add
+  wait_for_completion_killable_timeout
+  wakeup_source_add
+  __kernel_write
+  strncat
+  panic_flush_device_cache_circled_off
+  panic_flush_device_cache_circled_on
+  param_get_uint
+  device_find_child_by_name
+  i2c_recover_bus
+  i2c_smbus_read_byte_data
+  i2c_smbus_read_i2c_block_data
+  i2c_smbus_read_word_data
+  i2c_smbus_write_byte
+  i2c_smbus_write_byte_data
+  i2c_smbus_write_i2c_block_data
+  i2c_smbus_write_word_data
+  ipa3_uc_mhi_print_stats
+  debugfs_create_ulong
+  kernel_power_off
+  power_supply_unregister
+  remove_proc_subtree
+  revert_creds

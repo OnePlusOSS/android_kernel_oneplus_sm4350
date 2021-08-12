@@ -171,6 +171,9 @@ static int c_show(struct seq_file *m, void *v)
 		}
 		seq_puts(m, "\n");
 
+#ifdef CONFIG_ARCH_HOLI
+		seq_puts(m, "Hardware\t: Qualcomm Technologies, Inc SM4350\n");
+#endif /* CONFIG_ARCH_HOLI */
 		seq_printf(m, "CPU implementer\t: 0x%02x\n",
 			   MIDR_IMPLEMENTOR(midr));
 		seq_printf(m, "CPU architecture: 8\n");

@@ -3549,7 +3549,7 @@ static void sd_shutdown(struct device *dev)
 		return;
 
 	if (sdkp->WCE && sdkp->media_present) {
-		sd_printk(KERN_NOTICE, sdkp, "Synchronizing SCSI cache\n");
+		sd_printk(KERN_NOTICE, sdkp, "Synchronizing SCSI cache when shutdown\n");
 		sd_sync_cache(sdkp, NULL);
 	}
 
@@ -3569,7 +3569,7 @@ static int sd_suspend_common(struct device *dev, bool ignore_stop_errors)
 		return 0;
 
 	if (sdkp->WCE && sdkp->media_present) {
-		sd_printk(KERN_NOTICE, sdkp, "Synchronizing SCSI cache\n");
+		sd_printk(KERN_NOTICE, sdkp, "Synchronizing SCSI cache when suspend common\n");
 		ret = sd_sync_cache(sdkp, &sshdr);
 
 		if (ret) {

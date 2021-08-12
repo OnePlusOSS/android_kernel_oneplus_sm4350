@@ -459,6 +459,12 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	pr_debug("%s: %s,%d voting %s of val=%d\n",
 		votable->name,
 		client_str, client_id, enabled ? "on" : "off", val);
+	if ((!strcmp(votable->name, "PL_DISABLE")) || (!strcmp(votable->name, "PL_ENABLE_INDIRECT"))) {
+		pr_err("[OPLUS_CHG][VOTER]%s: %s,%d voting %s of val=%d\n",
+			votable->name,
+			client_str, client_id, enabled ? "on" : "off", val);
+	}
+
 	switch (votable->type) {
 	case VOTE_MIN:
 		vote_min(votable, client_id, &effective_result, &effective_id);

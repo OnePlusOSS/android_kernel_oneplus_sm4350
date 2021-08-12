@@ -1,0 +1,220 @@
+/dts-v1/;
+/plugin/;
+
+#include "../../../../arch/arm64/boot/dts/vendor/qcom/holi-mtp-overlay.dts"
+#include "holi-oem-common-mtp.dtsi"
+#include "dre9.dtsi"
+/* DTBO: project Special overlay */
+
+/ {
+	model = "Qualcomm Technologies, Inc. Holi MTP";
+
+     oem,project-id = <0x2083c>; /* use hex*/
+     oem,project-codename = "dre9";
+     /*we can add hw id to this array,uefi can auto read it,if new hw,we add to this array  */
+     oem,hw-id = <11 12 13 21 22 23 31 32 33>;
+
+};
+
+
+#include "oplus-charge.dtsi"
+
+&mtp_batterydata {
+	qcom,batt-id-range-pct = <15>;
+	/delete-node/ qcom,ATL436186_020H_3780mAh;
+	/delete-node/ qcom,ATL466271_3300mAh;
+	/delete-node/ qcom,alium_860_89032_0000_3600mAh;
+	#include "oneplus_battery_5000mah_15k_pmi632_Coslight.dtsi"
+	#include "oneplus_battery_5000mah_27k_pmi632_Desay.dtsi"
+};
+
+&thermal_zones {
+	socd {
+		status = "disabled";
+	};
+};
+
+&ufshc_mem {
+	spm-level = <3>;
+};
+
+&pm7250b_charger {
+	status = "ok";
+	#io-channel-cells = <1>;
+	io-channels = <&pm7250b_vadc ADC5_USB_IN_V_16>,
+		      <&pm7250b_vadc ADC5_USB_IN_I>,
+		      <&pm7250b_vadc ADC5_CHG_TEMP>,
+		      <&pm7250b_vadc ADC5_DIE_TEMP>,
+		      <&pm7250b_vadc ADC5_AMUX_THM4_30K_PU>,
+		      <&pm7250b_vadc ADC5_AMUX_THM3_30K_PU>,
+		      <&pm7250b_vadc ADC5_SBUx>,
+		      <&pm7250b_vadc ADC5_VPH_PWR>,
+		      <&pm7250b_vadc ADC5_AMUX_THM1_100K_PU>,
+		      <&pm7250b_qg PSY_IIO_RESISTANCE_ID>,
+		      <&pm7250b_qg PSY_IIO_VOLTAGE_NOW>,
+		      <&pm7250b_qg PSY_IIO_TEMP>,
+		      <&pm7250b_qg PSY_IIO_CAPACITY>,
+		      <&pm7250b_qg PSY_IIO_VOLTAGE_OCV>,
+		      <&pm7250b_qg PSY_IIO_VOLTAGE_AVG>,
+		      <&pm7250b_qg PSY_IIO_DEBUG_BATTERY>,
+		      <&pm7250b_qg PSY_IIO_REAL_CAPACITY>,
+		      <&pm7250b_qg PSY_IIO_CC_SOC>,
+		      <&pm7250b_qg PSY_IIO_CURRENT_NOW>,
+		      <&pm7250b_qg PSY_IIO_VOLTAGE_MAX>,
+		      <&pm7250b_qg PSY_IIO_CHARGE_FULL>,
+		      <&pm7250b_qg PSY_IIO_CHARGE_COUNTER>,
+		      <&pm7250b_qg PSY_IIO_CYCLE_COUNT>,
+		      <&pm7250b_qg PSY_IIO_CHARGE_FULL_DESIGN>,
+		      <&pm7250b_qg PSY_IIO_TIME_TO_FULL_NOW>,
+		      <&bq25600_slaver  PSY_IIO_INPUT_SUSPEND>,
+		      <&bq25600_slaver  PSY_IIO_PARALLEL_MODE>,
+		      <&bq25600_slaver  PSY_IIO_PARALLEL_BATFET_MODE>,
+		      <&bq25600_slaver  PSY_IIO_MIN_ICL>,
+		      <&bq25600_slaver  PSY_IIO_PARALLEL_FCC_MAX>,
+		      <&bq25600_slaver  PSY_IIO_CURRENT_MAX>,
+		      <&bq25600_slaver  PSY_IIO_CONSTANT_CHARGE_CURRENT_MAX>,
+		      <&bq25600_slaver  PSY_IIO_VOLTAGE_MAX>,
+		      <&bq25600_slaver  PSY_IIO_CHARGE_TYPE>,
+		      <&pm6150l_vadc ADC5_GPIO4_100K_PU>;
+	io-channel-names = "usb_in_voltage",
+			   "usb_in_current",
+			   "chg_temp",
+			   "die_temp",
+			   "usb_temp_l",
+			   "usb_temp_r",
+			   "sbux_res",
+			   "vph_voltage",
+			   "skin_temp",
+			   "resistance_id",
+			   "voltage_now",
+			   "temp",
+			   "capacity",
+			   "voltage_ocv",
+			   "voltage_avg",
+			   "debug_battery",
+			   "real_capacity",
+			   "cc_soc",
+			   "current_now",
+			   "voltage_max",
+			   "charge_full",
+			   "charge_counter",
+			   "cycle_count",
+			   "charge_full_design",
+			   "time_to_full_now",
+			   "pl_input_suspend",
+			   "pl_mode",
+			   "pl_batfet_mode",
+			   "pl_min_icl",
+			   "pl_fcc_max",
+			   "pl_current_max",
+			   "pl_constant_charge_current_max",
+			   "pl_voltage_max",
+			   "pl_charge_type",
+			   "sys_skin_temp";
+	qcom,battery-data = <&mtp_batterydata>;
+	qcom,sec-charger-config = <2>;
+	qcom,auto-recharge-soc = <98>;
+	//qcom,step-charging-enable;
+	qcom,sw-jeita-enable;
+	qcom,charger-temp-max = <800>;
+	qcom,smb-temp-max = <800>;
+	qcom,suspend-input-on-debug-batt;
+	//qcom,fcc-stepping-enable;
+	//qcom,fcc-step-delay-ms = <100>;
+	//qcom,fcc-step-size-ua = <100000>;
+	qcom,smb-internal-pull-kohm = <0>;
+	qcom,en-skin-therm-mitigation;
+	op,usb-check = <&tlmm 97 0x00>;
+	qcom,hvdcp3-standalone-config;
+
+	qcom,vbus-ctrl-gpio = <&pm7250b_gpios 7 GPIO_ACTIVE_LOW>;
+	pinctrl-names = "default";
+        pinctrl-0 = <&vbus_ctrl_default>;
+
+	/* for usb connecter temperature check */
+	op,normal-check-interval-period = <50>;
+	op,fast-check-interval-period = <50>;
+	op,fast-check-threshold-temp = <33>;
+	op,high-temp-short-check-timeout = <1500>;
+	op,first-protect-connecter-temp = <57>;
+	op,second-protect-connecter-temp = <45>;
+	op,second-protect-interval-temp = <8>;
+	op,third-protect-rise-rate = <3>;
+	op,third-protect-loop-temp = <40>;
+	op,third-protect-interval-temp = <8>;
+	op,third-protect-base-temp = <20>;
+
+	panel = <&dsi_nt36672c_tm_video>;
+};
+
+&pm7250b_qg {
+	status = "ok";
+	#io-channel-cells = <1>;
+	io-channels = <&pm7250b_vadc ADC5_BAT_THERM_30K_PU>,
+		      <&pm7250b_vadc ADC5_BAT_ID_100K_PU>,
+		      <&pm7250b_charger PSY_IIO_INPUT_CURRENT_LIMITED>,
+		      <&pm7250b_charger PSY_IIO_RECHARGE_SOC>,
+		      <&pm7250b_charger PSY_IIO_FORCE_RECHARGE>,
+		      <&pm7250b_charger PSY_IIO_CHARGE_DONE>;
+	io-channel-names = "batt-therm",
+			   "batt-id",
+			   "input_current_limited",
+			   "recharge_soc",
+			   "force_recharge",
+			   "charge_done";
+	qcom,battery-data = <&mtp_batterydata>;
+	qcom,qg-iterm-ma = <300>;
+	qcom,hold-soc-while-full;
+	qcom,linearize-soc;
+	qcom,cl-feedback-on;
+	qcom,tcss-enable;
+	qcom,fvss-enable;
+	qcom,fvss-vbatt-mv = <3300>;
+	qcom,bass-enable;
+	//qcom,use-cp-iin-sns;
+	qcom,qg-ext-sns;
+};
+
+&qusb_phy0{
+	qcom,qusb-phy-init-seq =
+	/* <value reg_offset> */
+	<0x23 0x210 /* PWR_CTRL1 */
+	0x03 0x04 /* PLL_ANALOG_CONTROLS_TWO */
+	0x7c 0x18c /* PLL_CLOCK_INVERTERS */
+	0x80 0x2c /* PLL_CMODE */
+	0x0a 0x184 /* PLL_LOCK_DELAY */
+	0x19 0xb4 /* PLL_DIGITAL_TIMERS_TWO */
+	0x40 0x194 /* PLL_BIAS_CONTROL_1 */
+	0x16 0x198 /* PLL_BIAS_CONTROL_2 */
+	0x21 0x214 /* PWR_CTRL2 */
+	0x08 0x220 /* IMP_CTRL1 */
+	0x58 0x224 /* IMP_CTRL2 */
+	0x45 0x240 /* TUNE1 */
+	0x29 0x244 /* TUNE2 */
+	0xca 0x248 /* TUNE3 */
+	0x04 0x24c /* TUNE4 */
+	0x03 0x250 /* TUNE5 */
+	0x30 0x23c /* CHG_CTRL2 */
+	0x22 0x210>; /* PWR_CTRL1 */
+
+	qcom,qusb-phy-host-init-seq =
+	/* <value reg_offset> */
+	<0x23 0x210 /* PWR_CTRL1 */
+	0x03 0x04 /* PLL_ANALOG_CONTROLS_TWO */
+	0x7c 0x18c /* PLL_CLOCK_INVERTERS */
+	0x80 0x2c /* PLL_CMODE */
+	0x0a 0x184 /* PLL_LOCK_DELAY */
+	0x19 0xb4 /* PLL_DIGITAL_TIMERS_TWO */
+	0x40 0x194 /* PLL_BIAS_CONTROL_1 */
+	0x1c 0x198 /* PLL_BIAS_CONTROL_2 */
+	0x21 0x214 /* PWR_CTRL2 */
+	0x08 0x220 /* IMP_CTRL1 */
+	0x58 0x224 /* IMP_CTRL2 */
+	0x57 0x240 /* TUNE1 */
+	0x2b 0x244 /* TUNE2 */
+	0xca 0x248 /* TUNE3 */
+	0x04 0x24c /* TUNE4 */
+	0x03 0x250 /* TUNE5 */
+	0x30 0x23c /* CHG_CTRL2 */
+	0x22 0x210>; /* PWR_CTRL1 */
+};

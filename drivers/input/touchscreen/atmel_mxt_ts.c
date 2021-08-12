@@ -378,7 +378,6 @@ struct mxt_data {
 	enum mxt_suspend_mode suspend_mode;
 
 	bool use_regulator;
-	bool poweron;
 	struct regulator *reg_vdd;
 	struct regulator *reg_avdd;
 	struct regulator *reg_xvdd;
@@ -459,7 +458,7 @@ static int mxt_wait_for_completion(struct mxt_data *data,
 	if (ret < 0) {
 		return ret;
 	} else if (ret == 0) {
-		dev_dbg(dev, "Wait for completion timed out.\n");
+		dev_err(dev, "Wait for completion timed out.\n");
 		return -ETIMEDOUT;
 	}
 	return 0;
@@ -1984,7 +1983,7 @@ static int mxt_regulator_enable(struct mxt_data *data)
 {
 	int error;
 
-	if (!data->use_regulator || data->poweron)
+	if (!data->use_regulator)
 		return 0;
 
 	gpiod_set_value(data->reset_gpio, 0);
@@ -2016,7 +2015,6 @@ static int mxt_regulator_enable(struct mxt_data *data)
 	gpiod_set_value(data->reset_gpio, 1);
 	mxt_wait_for_completion(data, &data->bl_completion, MXT_POWERON_DELAY);
 
-	data->poweron = true;
 	return 0;
 
 err_dis_avdd:
@@ -2028,15 +2026,10 @@ err_dis_vdd:
 
 static void mxt_regulator_disable(struct mxt_data *data)
 {
-	if (!data->poweron)
-		return;
-
 	regulator_disable(data->reg_vdd);
 	regulator_disable(data->reg_avdd);
 	if (!IS_ERR(data->reg_xvdd))
 		regulator_disable(data->reg_xvdd);
-
-	data->poweron = false;
 }
 
 static int mxt_regulator_configure(struct mxt_data *data, bool state)

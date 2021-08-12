@@ -16,36 +16,37 @@ gen_headers_exclude_srcs_arm = [
 
 gen_headers_out_arm = [
 
-    // Matching generated-y:
+	// Matching generated-y:
 
-    "asm/unistd-common.h",
-    "asm/unistd-oabi.h",
-    "asm/unistd-eabi.h",
+	"asm/unistd-common.h",
+	"asm/unistd-oabi.h",
+	"asm/unistd-eabi.h",
 
-    // Matching generic-y:
+	// Matching generic-y:
 
-    "asm/kvm_para.h",
+	"asm/kvm_para.h",
 
-    // Matching mandatory-y:
+	// Matching mandatory-y:
 
-    "asm/bitsperlong.h",
-    "asm/bpf_perf_event.h",
-    "asm/errno.h",
-    "asm/ioctl.h",
-    "asm/ipcbuf.h",
-    "asm/msgbuf.h",
-    "asm/param.h",
-    "asm/poll.h",
-    "asm/resource.h",
-    "asm/sembuf.h",
-    "asm/shmbuf.h",
-    "asm/siginfo.h",
-    "asm/socket.h",
-    "asm/sockios.h",
-    "asm/termbits.h",
-    "asm/termios.h",
+	"asm/bitsperlong.h",
+	"asm/bpf_perf_event.h",
+	"asm/errno.h",
+	"asm/ioctl.h",
+	"asm/ipcbuf.h",
+	"asm/msgbuf.h",
+	"asm/param.h",
+	"asm/poll.h",
+	"asm/resource.h",
+	"asm/sembuf.h",
+	"asm/shmbuf.h",
+	"asm/siginfo.h",
+	"asm/socket.h",
+	"asm/sockios.h",
+	"asm/termbits.h",
+	"asm/termios.h",
 
-    // From include/uapi/**/*.h
+	// From include/uapi/**/*.h
+
 
     "asm-generic/auxvec.h",
     "asm-generic/bitsperlong.h",
@@ -938,28 +939,28 @@ gen_headers_out_arm = [
     "linux/netfilter/ipset/ip_set_list.h",
     "linux/wil6210_uapi.h",
 
-    // From arch/arm/include/uapi/**/*.h
+	// From arch/arm/include/uapi/**/*.h
 
-    "asm/auxvec.h",
-    "asm/byteorder.h",
-    "asm/fcntl.h",
-    "asm/hwcap.h",
-    "asm/ioctls.h",
-    "asm/kvm.h",
-    "asm/mman.h",
-    "asm/perf_regs.h",
-    "asm/posix_types.h",
-    "asm/ptrace.h",
-    "asm/setup.h",
-    "asm/sigcontext.h",
-    "asm/signal.h",
-    "asm/stat.h",
-    "asm/statfs.h",
-    "asm/swab.h",
-    "asm/types.h",
-    "asm/unistd.h",
+	"asm/auxvec.h",
+	"asm/byteorder.h",
+	"asm/fcntl.h",
+	"asm/hwcap.h",
+	"asm/ioctls.h",
+	"asm/kvm.h",
+	"asm/mman.h",
+	"asm/perf_regs.h",
+	"asm/posix_types.h",
+	"asm/ptrace.h",
+	"asm/setup.h",
+	"asm/sigcontext.h",
+	"asm/signal.h",
+	"asm/stat.h",
+	"asm/statfs.h",
+	"asm/swab.h",
+	"asm/types.h",
+	"asm/unistd.h",
 
-    // From techpack/*/include/uapi/*/**/*.h
+	// From techpack/*/include/uapi/*/**/*.h
 
     "audio/linux/avtimer.h",
     "audio/linux/msm_audio.h",
@@ -1006,6 +1007,11 @@ gen_headers_out_arm = [
     "camera/media/cam_sensor.h",
     "camera/media/cam_sync.h",
     "camera/media/cam_tfe.h",
+//ifdef OPLUS_FEATURE_CAMERA_COMMON
+//lixin@Camera.Drv, 2020/05/25, modify for camera kernel decoupling
+    "camera/oplus/media/oplus_cam_sensor.h",
+    "camera/oplus/media/oplus_cam_defs.h",
+//endif
     "display/drm/msm_drm_pp.h",
     "display/drm/sde_drm.h",
     "display/media/mmm_color_fmt.h",
@@ -1013,6 +1019,10 @@ gen_headers_out_arm = [
     "display/hdcp/msm_hdmi_hdcp_mgr.h",
     "vidc/media/msm_media_info.h",
     "vidc/media/msm_vidc_utils.h",
+    "camera/media/cam_isp_sfe.h",
+    "linux/netfilter_ipv4/ipt_NATTYPE.h",
+    "display/drm/msm_drm_iris.h",
+
 ]
 
 genrule {

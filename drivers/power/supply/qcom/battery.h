@@ -17,6 +17,11 @@ struct charger_param {
 	int (*iio_write)(struct device *dev, int iio_chan, int val);
 };
 
+#ifdef CONFIG_CHARGER_BQ25600_SLAVE
+extern int master_debug_fcc;
+extern int slave_debug_fcc;
+#endif
+
 int qcom_batt_init(struct device *dev, struct charger_param *param);
 void qcom_batt_deinit(void);
 #endif /* __BATTERY_H */
