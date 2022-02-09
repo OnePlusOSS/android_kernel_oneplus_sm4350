@@ -73,7 +73,9 @@ struct qpnp_pon {
 	struct input_dev	*pon_input;
 	struct qpnp_pon_config	*pon_cfg;
 	struct pon_regulator	*pon_reg_cfg;
+	struct list_head	restore_regs;
 	struct list_head	list;
+	struct mutex		restore_lock;
 	struct delayed_work	bark_work;
 #ifdef CONFIG_OEM_FORCE_DUMP
 	struct kthread_worker	*kworker;
@@ -191,5 +193,8 @@ static inline int qpnp_pon_modem_pwr_off(enum pon_power_off_type type)
 }
 
 #endif
-
+#ifdef CONFIG_OPLUS_FEATURE_QCOM_PMICWD
+int qpnp_pon_restore(struct device *dev);
+int qpnp_pon_freeze(struct device *dev);
+#endif
 #endif

@@ -27,8 +27,10 @@
 			qcom,pmicwd;
 
 			interrupts = <0x0 0x8 0x0 IRQ_TYPE_EDGE_BOTH>,
-				     <0x0 0x8 0x1 IRQ_TYPE_EDGE_BOTH>;
-			interrupt-names = "kpdpwr", "resin";
+					<0x0 0x8 0x1 IRQ_TYPE_EDGE_BOTH>,
+					<0x0 0x8 0x5 IRQ_TYPE_EDGE_BOTH>;
+			interrupt-names = "kpdpwr", "resin", "kpdpwr-resin-bark";
+			qcom,s3-src = "kpdpwr-and-resin";
 			qcom,pon-dbc-delay = <15625>;
 			qcom,kpdpwr-sw-debounce;
 			qcom,system-reset;
@@ -36,14 +38,31 @@
 
 			qcom,pon_1 {
 				qcom,pon-type = <PON_POWER_ON_TYPE_KPDPWR>;
+				qcom,support-reset = <0>;
+				qcom,s1-timer = <6720>;
+				qcom,s2-timer = <2000>;
+				qcom,s2-type = <PON_POWER_OFF_TYPE_DVDD_HARD_RESET>;
 				qcom,pull-up;
 				linux,code = <KEY_POWER>;
 			};
 
 			qcom,pon_2 {
 				qcom,pon-type = <PON_POWER_ON_TYPE_RESIN>;
+				qcom,support-reset = <0>;
+				qcom,s1-timer = <6720>;
+				qcom,s2-timer = <2000>;
+				qcom,s2-type = <PON_POWER_OFF_TYPE_HARD_RESET>;
 				qcom,pull-up;
 				linux,code = <KEY_VOLUMEUP>;
+			};
+			qcom,pon_3 {
+				qcom,pon-type = <PON_POWER_ON_TYPE_KPDPWR_RESIN>;
+				qcom,support-reset = <0>;
+				qcom,s1-timer = <6720>;
+				qcom,s2-timer = <2000>;
+				/* @BSP Modify for shutdown */
+				qcom,s2-type = <PON_POWER_OFF_TYPE_SHUTDOWN>;
+				qcom,pull-up;
 			};
 		};
 

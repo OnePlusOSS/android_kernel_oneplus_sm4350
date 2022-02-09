@@ -30,6 +30,7 @@
 
 #include <linux/msm_drm_notify.h>
 #include <soc/qcom/msm-poweroff.h>
+#include <linux/proc_fs.h>
 
 #if IS_ENABLED(CONFIG_OEM_FORCE_DUMP)
 #include <linux/oem/oem_force_dump.h>
@@ -207,6 +208,8 @@ struct qpnp_pon_config {
 	bool			old_state;
 	bool			use_bark;
 	bool			config_reset;
+	bool		s2_reset_configed;
+	struct device_node	*cfg_node;
 };
 
 struct pon_regulator {
@@ -358,6 +361,11 @@ static int oem_qpnp_config_init(struct qpnp_pon *pon)
 	return 0;
 }
 #endif
+
+static struct qpnp_pon_config *qpnp_get_cfg(struct qpnp_pon *pon, u32 pon_type);
+static int qpnp_pon_config_parse_reset_info(struct qpnp_pon *pon,
+					    struct qpnp_pon_config *cfg, struct device_node *node);
+static int qpnp_config_reset(struct qpnp_pon *pon, struct qpnp_pon_config *cfg);
 
 #if !IS_ENABLED(CONFIG_OPLUS_FEATURE_QCOM_PMICWD)
 static int
@@ -555,6 +563,75 @@ static ssize_t debounce_us_store(struct device *dev,
 	return size;
 }
 static DEVICE_ATTR_RW(debounce_us);
+
+static ssize_t s2_reset_config_read(struct file *file, char __user *buf,
+					    size_t count, loff_t *ppos)
+{
+	int len = 0;
+	int ret = 0;
+	char page[QPNP_PON_BUFFER_SIZE];
+	struct qpnp_pon *pon = sys_reset_dev;
+	struct qpnp_pon_config *cfg = NULL;
+
+	if (pon == NULL) {
+		pr_err("qpnp-power-on is not ready");
+		return -ENODEV;
+	}
+	cfg = qpnp_get_cfg(pon, PON_KPDPWR);
+
+	len = snprintf(page, QPNP_PON_BUFFER_SIZE, "%d\n", cfg->s2_reset_configed);
+	ret = simple_read_from_buffer(buf, count, ppos, page, len);
+
+	return ret;
+}
+
+static ssize_t s2_reset_config_write(struct file *file, const char __user *buf,
+				      size_t count, loff_t *lo)
+{
+	int val = 0;
+	char buffer[8] = { 0 };
+	struct qpnp_pon *pon = sys_reset_dev;
+	struct qpnp_pon_config *cfg = NULL;
+	int rc;
+
+	if (pon == NULL) {
+		pr_err("qpnp-power-on is not ready");
+		return -ENODEV;
+	}
+	cfg = qpnp_get_cfg(pon, PON_KPDPWR);
+
+	if (count > 8) {
+		pr_err("input too many words.");
+		return -EFAULT;
+	}
+
+	if (copy_from_user(buffer, buf, count)) {
+		pr_err("copy parameter from user error.\n");
+		return -EFAULT;
+	}
+	pr_info("buffer=%s", buffer);
+	rc = kstrtoint(buffer, 0, &val);
+
+	if (cfg->support_reset) {
+		if (val == 0 && cfg->s2_reset_configed) {
+			qpnp_pon_masked_write(pon, cfg->s2_cntl2_addr, QPNP_PON_S2_CNTL_EN, 0);
+			cfg->s2_reset_configed = false;
+		} else if (val != 0 && !cfg->s2_reset_configed) {
+			qpnp_pon_config_parse_reset_info(pon, cfg, cfg->cfg_node);
+			qpnp_config_reset(pon, cfg);
+		}
+	} else {
+		pr_info("not support kpdpwr reset, check dts");
+	}
+	return count;
+}
+
+static const struct file_operations proc_s2_reset_config_ops = {
+	.read = s2_reset_config_read,
+	.write = s2_reset_config_write,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+};
 
 static int qpnp_pon_reset_config(struct qpnp_pon *pon,
 				 enum pon_power_off_type type)
@@ -1379,6 +1456,7 @@ static int qpnp_config_reset(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 	case PON_KPDPWR:
 		s1_timer_addr = QPNP_PON_KPDPWR_S1_TIMER(pon);
 		s2_timer_addr = QPNP_PON_KPDPWR_S2_TIMER(pon);
+		cfg->s2_reset_configed = true;
 		break;
 	case PON_RESIN:
 		s1_timer_addr = QPNP_PON_RESIN_S1_TIMER(pon);
@@ -1778,7 +1856,7 @@ static int qpnp_pon_config_init(struct qpnp_pon *pon,
 			continue;
 
 		cfg = &pon->pon_cfg[i++];
-
+		cfg->cfg_node = cfg_node;
 		rc = of_property_read_u32(cfg_node, "qcom,pon-type",
 					  &cfg->pon_type);
 		if (rc) {
@@ -2790,7 +2868,8 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	}
 
 	qpnp_pon_debugfs_init(pon);
-
+	if (!proc_create("s2_reset_config", 0644, NULL, &proc_s2_reset_config_ops))
+		pr_err("Failed to register s2_reset_config proc\n");
 	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_QCOM_PMICWD)
 	pmicwd_init(pdev, pon, sys_reset);
 	kpdpwr_init(pon, sys_reset);

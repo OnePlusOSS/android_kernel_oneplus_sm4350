@@ -1349,6 +1349,9 @@ static void f2fs_put_super(struct super_block *sb)
 	int i;
 	bool dropped;
 
+	/* unregister procfs/sysfs entries in advance to avoid race case */
+	f2fs_unregister_sysfs(sbi);
+
 #ifdef CONFIG_F2FS_OF2FS
 	/*[ASTI-147]: add for oDiscard */
 	spin_lock(&sb_list_lock);
@@ -1421,7 +1424,9 @@ static void f2fs_put_super(struct super_block *sb)
 
 	kvfree(sbi->ckpt);
 
-	f2fs_unregister_sysfs(sbi);
+#ifdef CONFIG_F2FS_BD_STAT
+	f2fs_destroy_bd_stat(sbi);
+#endif
 
 	sb->s_fs_info = NULL;
 	if (sbi->s_chksum_driver)
@@ -4029,6 +4034,9 @@ free_meta:
 	truncate_inode_pages_final(META_MAPPING(sbi));
 	/* evict some inodes being cached by GC */
 	evict_inodes(sb);
+#ifdef CONFIG_F2FS_BD_STAT
+	f2fs_destroy_bd_stat(sbi);
+#endif
 	f2fs_unregister_sysfs(sbi);
 free_root_inode:
 	dput(sb->s_root);

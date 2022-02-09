@@ -1,3 +1,5 @@
+
+
 #ifndef _OPPO_HEALTHINFO_H_
 #define _OPPO_HEALTHINFO_H_
 
@@ -13,7 +15,7 @@
 
 #ifdef CONFIG_OPPO_MEM_MONITOR
 #include <linux/memory_monitor.h>
-#endif
+#endif /*CONFIG_OPPO_MEM_MONITOR*/
 
 #define ohm_err(fmt, ...) \
         printk(KERN_ERR "[OHM_ERR][%s]"fmt, __func__, ##__VA_ARGS__)
@@ -182,4 +184,4 @@ struct brk_accounts_st {
         int vm_search_two_way;
 };
 
-#endif
+#endif /* _OPPO_HEALTHINFO_H_*/

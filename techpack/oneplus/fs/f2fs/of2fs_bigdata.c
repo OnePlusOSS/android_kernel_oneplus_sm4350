@@ -402,12 +402,15 @@ void f2fs_build_bd_stat(struct f2fs_sb_info *sbi)
 
 void f2fs_destroy_bd_stat(struct f2fs_sb_info *sbi)
 {
+	/* removed by http://gerrit.scm.adc.com:8080/#/c/9340459/ */
+	/*
 	remove_proc_entry("base_info", sbi->s_proc);
 	remove_proc_entry("discard_info", sbi->s_proc);
 	remove_proc_entry("cp_info", sbi->s_proc);
 	remove_proc_entry("gc_info", sbi->s_proc);
 	remove_proc_entry("fsync_info", sbi->s_proc);
 	remove_proc_entry("hotcold_info", sbi->s_proc);
+	*/
 
 	if (sbi->bd_info) {
 		kfree(sbi->bd_info);

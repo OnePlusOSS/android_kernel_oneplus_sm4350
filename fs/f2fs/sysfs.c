@@ -1116,7 +1116,12 @@ void f2fs_unregister_sysfs(struct f2fs_sb_info *sbi)
 {
 	if (sbi->s_proc) {
 #ifdef CONFIG_F2FS_BD_STAT
-		f2fs_destroy_bd_stat(sbi);
+		remove_proc_entry("base_info", sbi->s_proc);
+		remove_proc_entry("discard_info", sbi->s_proc);
+		remove_proc_entry("cp_info", sbi->s_proc);
+		remove_proc_entry("gc_info", sbi->s_proc);
+		remove_proc_entry("fsync_info", sbi->s_proc);
+		remove_proc_entry("hotcold_info", sbi->s_proc);
 #endif
 		remove_proc_entry("iostat_info", sbi->s_proc);
 		remove_proc_entry("segment_info", sbi->s_proc);
@@ -1134,4 +1139,5 @@ void f2fs_unregister_sysfs(struct f2fs_sb_info *sbi)
 	}
 	kobject_del(&sbi->s_kobj);
 	kobject_put(&sbi->s_kobj);
+	wait_for_completion(&sbi->s_kobj_unregister);
 }

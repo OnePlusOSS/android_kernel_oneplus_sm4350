@@ -549,6 +549,9 @@ static inline bool of2fs_need_balance_dirty(struct f2fs_sb_info *sbi)
 	long node_cnt, data_cnt;
 	int i;
 
+	if (IS_ERR_OR_NULL(bd))
+		return false;
+
 	last_jiffies = bd->ssr_last_jiffies;
 
 	if (time_before(jiffies, last_jiffies + interval))

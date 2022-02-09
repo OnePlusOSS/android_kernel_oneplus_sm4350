@@ -263,8 +263,8 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 out:
 	if (v->mode == DM_VERITY_MODE_LOGGING)
 		return 0;
-
-	if (v->mode == DM_VERITY_MODE_RESTART) {
+    /* resolve corruput device added in 2021.8.4 */
+	if (v->mode == DM_VERITY_MODE_RESTART && !verity_is_system_shutting_down()) {
 #ifdef CONFIG_DM_VERITY_AVB
 		dm_verity_avb_error_handler();
 #endif

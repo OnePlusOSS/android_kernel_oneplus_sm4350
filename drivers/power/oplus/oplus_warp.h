@@ -159,10 +159,12 @@ struct oplus_warp_chip {
 	int adapter_update_report;
 	int dpdm_switch_mode;
 	bool support_warp_by_normal_charger_path;
+/* wenbin.liu@BSP.CHG.Vooc, 2016/10/20*/
 /* Add for warp batt 4.40*/
 	bool batt_type_4400mv;
 	bool warp_fw_check;
 	int warp_fw_type;
+//PengNan@BSP.CHG.Vooc, 2018/02/28, add for warp fw update.
 	int fw_update_flag;
 	struct manufacture_info manufacture_info;
 	bool warp_fw_update_newmethod;
