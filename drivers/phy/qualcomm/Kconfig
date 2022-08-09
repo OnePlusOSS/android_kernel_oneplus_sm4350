@@ -61,12 +61,6 @@ config PHY_QCOM_UFS
 
 if PHY_QCOM_UFS
 
-config PHY_QCOM_UFS_V3
-	tristate
-	default PHY_QCOM_UFS
-	help
-	  Support for 11nm UFS QMP phy present on QCOM chipsets.
-
 config PHY_QCOM_UFS_V4
 	tristate
 	default PHY_QCOM_UFS

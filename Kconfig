@@ -5,6 +5,30 @@
 #
 mainmenu "Linux/$(ARCH) $(KERNELVERSION) Kernel Configuration"
 
+comment "Compiler: $(CC_VERSION_TEXT)"
+#ifdef CONFIG_OPLUS_SYSTEM_KERNEL
+config OPLUS_SYSTEM_KERNEL_QCOM
+  bool "config oplus system feature "
+  default y
+  help
+	define this config to Distinguish between qcom and mtk platform
+
+config OPLUS_SYSTEM_KERNEL_MTK
+  bool "config oplus system feature "
+  default n
+  help
+	define this config to Distinguish between qcom and mtk platform
+source "Kconfig.debug"
+#endif	
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+config OPLUS_FEATURE_CHG_MISC
+	tristate "OPLUS CHARGER MISC"
+	default n
+	help
+	  Enables support for the oplus charging misc
+#endif
+
 source "scripts/Kconfig.include"
 
 source "init/Kconfig"
@@ -30,3 +54,5 @@ source "lib/Kconfig"
 source "lib/Kconfig.debug"
 
 source "Documentation/Kconfig"
+
+source "kernel/Kconfig.panicflush"

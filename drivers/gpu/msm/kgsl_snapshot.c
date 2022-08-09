@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
-#include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/utsname.h>
-#include <soc/qcom/minidump.h>
 
 #include "adreno_cp_parser.h"
 #include "kgsl_device.h"
@@ -30,25 +28,6 @@ struct snapshot_obj_itr {
 	size_t remain;  /* Bytes remaining in buffer */
 	size_t write;   /* Bytes written so far */
 };
-
-static void add_to_minidump(struct kgsl_device *device)
-{
-	struct md_region md_entry;
-	int ret;
-
-	if (!msm_minidump_enabled() || device->snapshot_memory.in_minidump)
-		return;
-
-	scnprintf(md_entry.name, sizeof(md_entry.name), "GPU_SNAPSHOT");
-	md_entry.virt_addr = (u64)(device->snapshot_memory.ptr);
-	md_entry.phys_addr = __pa(device->snapshot_memory.ptr);
-	md_entry.size = device->snapshot_memory.size;
-	ret = msm_minidump_add_region(&md_entry);
-	if (ret < 0)
-		dev_err(device->dev, "Failed to register snapshot with minidump: %d\n", ret);
-	else
-		device->snapshot_memory.in_minidump = true;
-}
 
 static void obj_itr_init(struct snapshot_obj_itr *itr, u8 *buf,
 	loff_t offset, size_t remain)
@@ -672,98 +651,46 @@ err:
 	device->force_panic = false;
 }
 
-static void kgsl_device_snapshot_atomic(struct kgsl_device *device)
-{
-	struct kgsl_snapshot_header *header;
-	struct kgsl_snapshot *snapshot;
-	phys_addr_t pa;
+#if IS_ENABLED(CONFIG_DRM_MSM)
 
-	if (device->snapshot && device->force_panic)
-		return;
-
-	if (!atomic_read(&device->active_cnt)) {
-		dev_err(device->dev, "snapshot: device is powered off\n");
-		return;
-	}
-
-	device->snapshot_memory_atomic.size = device->snapshot_memory.size;
-	if (!device->snapshot_faultcount) {
-		/* Use non-atomic snapshot memory if it is unused */
-		device->snapshot_memory_atomic.ptr = device->snapshot_memory.ptr;
-	} else {
-		device->snapshot_memory_atomic.ptr = devm_kzalloc(&device->pdev->dev,
-				device->snapshot_memory_atomic.size, GFP_ATOMIC);
-
-		/* If we fail to allocate more than 1MB fall back to 1MB */
-		if ((!device->snapshot_memory_atomic.ptr) &&
-			device->snapshot_memory_atomic.size > SZ_1M) {
-			dev_err(device->dev, "Retrying atomic snapshot with 1MB\n");
-			device->snapshot_memory_atomic.size = SZ_1M;
-			device->snapshot_memory_atomic.ptr = devm_kzalloc(&device->pdev->dev,
-				device->snapshot_memory_atomic.size, GFP_ATOMIC);
+/************************************************
+adreno.h
+#define ADRENO_SOFT_FAULT BIT(0)
+#define ADRENO_HARD_FAULT BIT(1)
+#define ADRENO_TIMEOUT_FAULT BIT(2)
+#define ADRENO_IOMMU_PAGE_FAULT BIT(3)
+#define ADRENO_PREEMPT_FAULT BIT(4)
+#define ADRENO_GMU_FAULT BIT(5)
+#define ADRENO_CTX_DETATCH_TIMEOUT_FAULT BIT(6)
+#define ADRENO_GMU_FAULT_SKIP_SNAPSHOT BIT(7)
+*************************************************/
+char* kgsl_get_reason(int faulttype, bool gmu_fault){
+	if(gmu_fault){
+		return "GMUFAULT";
+	}else{
+		switch(faulttype){
+			case 0:
+				return "SOFTFAULT";
+			case 1:
+				return "HANGFAULT";
+			case 2:
+				return "TIMEOUTFAULT";
+			case 3:
+				return "IOMMUPAGEFAULT";
+			case 4:
+				return "PREEMPTFAULT";
+			case 5:
+				return "GMUFAULT";
+			case 6:
+				return "CTXDETATCHFAULT";
+			case 7:
+				return "GMUSKIPFAULT";
+			default:
+				return "UNKNOW";
 		}
-
-		if (!device->snapshot_memory_atomic.ptr) {
-			dev_err(device->dev,
-				"KGSL failed to allocate memory for atomic snapshot\n");
-			return;
-		}
 	}
-
-	/* Allocate memory for the snapshot instance */
-	snapshot = kzalloc(sizeof(*snapshot), GFP_ATOMIC);
-	if (snapshot == NULL)
-		return;
-
-	device->snapshot_atomic = true;
-	INIT_LIST_HEAD(&snapshot->obj_list);
-	INIT_LIST_HEAD(&snapshot->cp_list);
-
-	snapshot->start = device->snapshot_memory_atomic.ptr;
-	snapshot->ptr = device->snapshot_memory_atomic.ptr;
-	snapshot->remain = device->snapshot_memory_atomic.size;
-
-	header = (struct kgsl_snapshot_header *) snapshot->ptr;
-
-	header->magic = SNAPSHOT_MAGIC;
-	header->gpuid = kgsl_gpuid(device, &header->chipid);
-
-	snapshot->ptr += sizeof(*header);
-	snapshot->remain -= sizeof(*header);
-	snapshot->size += sizeof(*header);
-
-	/* Build the Linux specific header */
-	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_OS,
-			snapshot, snapshot_os_no_ctxt, NULL);
-
-	/*
-	 * Trigger both GPU and GMU snapshot. GPU specific code
-	 * will take care of whether to dumps full state or only
-	 * GMU state based on current GPU power state.
-	 */
-	if (device->ftbl->snapshot)
-		device->ftbl->snapshot(device, snapshot, NULL);
-
-	if (msm_minidump_enabled()) {
-		struct md_region md_entry;
-		int ret;
-
-		scnprintf(md_entry.name, sizeof(md_entry.name),
-				"ATOMIC_GPU_SNAPSHOT");
-		md_entry.virt_addr = (u64)(device->snapshot_memory_atomic.ptr);
-		md_entry.phys_addr = __pa(device->snapshot_memory_atomic.ptr);
-		md_entry.size = device->snapshot_memory_atomic.size;
-		ret = msm_minidump_add_region(&md_entry);
-		if (ret < 0)
-			dev_err(device->dev,
-				"Fail to add atomic snapshot with minidump: %d\n", ret);
-	}
-
-	/* log buffer info to aid in ramdump fault tolerance */
-	pa = __pa(device->snapshot_memory_atomic.ptr);
-	dev_err(device->dev, "Atomic GPU snapshot created at pa %pa++0x%zx\n",
-			&pa, snapshot->size);
 }
+#endif
 
 /**
  * kgsl_snapshot() - construct a device snapshot
@@ -881,7 +808,16 @@ void kgsl_device_snapshot(struct kgsl_device *device,
 	dev_err(device->dev, "%s snapshot created at pa %pa++0x%zx\n",
 			gmu_fault ? "GMU" : "GPU", &pa, snapshot->size);
 
-	add_to_minidump(device);
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	if(context!= NULL){
+		dev_err(device->dev, "falut=%s, pid=%d, processname=%s\n",
+			kgsl_get_reason(device->snapshotfault, gmu_fault), context->proc_priv->pid, context->proc_priv->comm);
+
+		memset(snapshot->snapshot_hashid, '\0', sizeof(snapshot->snapshot_hashid));
+		scnprintf(snapshot->snapshot_hashid, sizeof(snapshot->snapshot_hashid), "%d@%s@%s",
+		context->proc_priv->pid, context->proc_priv->comm, kgsl_get_reason(device->snapshotfault, gmu_fault));
+	}
+	#endif
 
 	if (device->skip_ib_capture)
 		BUG_ON(device->force_panic);
@@ -961,6 +897,41 @@ static int snapshot_release(struct kgsl_device *device,
 	return ret;
 }
 
+#if IS_ENABLED(CONFIG_DRM_MSM)
+static bool snapshot_ontrol_on = 0;
+
+static ssize_t snapshot_control_show(struct kgsl_device *device, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", device->snapshot_control);
+}
+
+static ssize_t snapshot_control_store(struct kgsl_device *device, const char *buf,
+	size_t count)
+{
+	unsigned int val = 0;
+	int ret;
+
+	if (device && count > 0)
+		device->snapshot_control = 0;
+
+	ret = kgsl_sysfs_store(buf, &val);
+
+	if (!ret && device){
+		device->snapshot_control = (bool)val;
+		snapshot_ontrol_on = device->snapshot_control;
+	}
+
+	return (ssize_t) ret < 0 ? ret : count;
+}
+
+static ssize_t snapshot_hashid_show(struct kgsl_device *device, char *buf)
+{
+	if(device->snapshot == NULL)
+		return 0;
+	return strlcpy(buf, device->snapshot->snapshot_hashid, PAGE_SIZE);
+}
+#endif
+
 /* Dump the sysfs binary data to the user */
 static ssize_t snapshot_show(struct file *filep, struct kobject *kobj,
 	struct bin_attribute *attr, char *buf, loff_t off,
@@ -971,6 +942,13 @@ static ssize_t snapshot_show(struct file *filep, struct kobject *kobj,
 	struct kgsl_snapshot_section_header head;
 	struct snapshot_obj_itr itr;
 	int ret = 0;
+
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	if (snapshot_ontrol_on) {
+		dev_err(device->dev, "snapshot: snapshot_ontrol_on is true, skip snapshot\n");
+		return 0;
+	}
+	#endif
 
 	mutex_lock(&device->mutex);
 	snapshot = device->snapshot;
@@ -1190,6 +1168,11 @@ static SNAPSHOT_ATTR(snapshot_legacy, 0644, snapshot_legacy_show,
 static SNAPSHOT_ATTR(skip_ib_capture, 0644, skip_ib_capture_show,
 		skip_ib_capture_store);
 
+#if IS_ENABLED(CONFIG_DRM_MSM)
+static SNAPSHOT_ATTR(snapshot_hashid, 0666, snapshot_hashid_show, NULL);
+static SNAPSHOT_ATTR(snapshot_control, 0666, snapshot_control_show, snapshot_control_store);
+#endif
+
 static ssize_t snapshot_sysfs_show(struct kobject *kobj,
 	struct attribute *attr, char *buf)
 {
@@ -1238,19 +1221,6 @@ static const struct attribute *snapshot_attrs[] = {
 	NULL,
 };
 
-static int kgsl_panic_notifier_callback(struct notifier_block *nb,
-		unsigned long action, void *unused)
-{
-	struct kgsl_device *device = container_of(nb, struct kgsl_device,
-							panic_nb);
-
-	/* To send NMI to GMU */
-	device->gmu_fault = true;
-	kgsl_device_snapshot_atomic(device);
-
-	return NOTIFY_OK;
-}
-
 void kgsl_device_snapshot_probe(struct kgsl_device *device, u32 size)
 {
 	device->snapshot_memory.size = size;
@@ -1274,16 +1244,15 @@ void kgsl_device_snapshot_probe(struct kgsl_device *device, u32 size)
 		return;
 	}
 
-	device->snapshot_memory.in_minidump = false;
 	device->snapshot = NULL;
 	device->snapshot_faultcount = 0;
 	device->force_panic = false;
 	device->snapshot_crashdumper = true;
 	device->snapshot_legacy = false;
 
-	device->snapshot_atomic = false;
-	device->panic_nb.notifier_call = kgsl_panic_notifier_callback;
-	device->panic_nb.priority = 1;
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	device->snapshot_control = 0;
+	#endif
 
 	/*
 	 * Set this to false so that we only ever keep the first snapshot around
@@ -1298,8 +1267,11 @@ void kgsl_device_snapshot_probe(struct kgsl_device *device, u32 size)
 
 	WARN_ON(sysfs_create_bin_file(&device->snapshot_kobj, &snapshot_attr));
 	WARN_ON(sysfs_create_files(&device->snapshot_kobj, snapshot_attrs));
-	atomic_notifier_chain_register(&panic_notifier_list,
-			&device->panic_nb);
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	WARN_ON(sysfs_create_file(&device->snapshot_kobj, &attr_snapshot_hashid.attr));
+
+	WARN_ON(sysfs_create_file(&device->snapshot_kobj, &attr_snapshot_control.attr));
+	#endif
 }
 
 /**
@@ -1311,24 +1283,14 @@ void kgsl_device_snapshot_probe(struct kgsl_device *device, u32 size)
  */
 void kgsl_device_snapshot_close(struct kgsl_device *device)
 {
-	if (msm_minidump_enabled() && device->snapshot_memory.in_minidump) {
-		struct md_region md_entry;
-
-		scnprintf(md_entry.name, sizeof(md_entry.name), "GPU_SNAPSHOT");
-		md_entry.virt_addr = (u64)(device->snapshot_memory.ptr);
-		md_entry.phys_addr = __pa(device->snapshot_memory.ptr);
-		md_entry.size = device->snapshot_memory.size;
-		if (msm_minidump_remove_region(&md_entry) < 0)
-			dev_err(device->dev, "Failed to remove snapshot with minidump\n");
-	}
-
-	atomic_notifier_chain_unregister(&panic_notifier_list,
-			&device->panic_nb);
-
 	sysfs_remove_bin_file(&device->snapshot_kobj, &snapshot_attr);
 	sysfs_remove_files(&device->snapshot_kobj, snapshot_attrs);
 
 	kobject_put(&device->snapshot_kobj);
+
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	device->snapshot_control = 0;
+	#endif
 }
 
 /**
@@ -1461,7 +1423,7 @@ done:
 				snapshot->ib2base);
 
 gmu_only:
+	complete_all(&snapshot->dump_gate);
 	BUG_ON(!snapshot->device->skip_ib_capture &&
 				snapshot->device->force_panic);
-	complete_all(&snapshot->dump_gate);
 }

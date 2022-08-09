@@ -219,6 +219,17 @@ enum task_boost_type {
 
 #endif
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern int sysctl_sched_assist_enabled;
+extern int sysctl_sched_assist_scene;
+
+extern int sysctl_slide_boost_enabled;
+extern int sysctl_boost_task_threshold;
+extern int sysctl_input_boost_enabled;
+extern u64 sched_assist_input_boost_duration;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+
 /* Task command name length: */
 #define TASK_COMM_LEN			16
 
@@ -783,6 +794,11 @@ union rcu_special {
 	} b; /* Bits. */
 	u32 s; /* Set of bits. */
 };
+
+#ifdef CONFIG_OPLUS_FEATURE_RT_INFO
+typedef void (*rt_info_handler)(void *task);
+extern void register_rt_info_handler(rt_info_handler func);
+#endif
 
 enum perf_event_task_context {
 	perf_invalid_context = -1,
@@ -1349,6 +1365,9 @@ struct task_struct {
 	int				latency_record_count;
 	struct latency_record		latency_record[LT_SAVECOUNT];
 #endif
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_ION) && defined(CONFIG_DUMP_TASKS_MEM)
+	atomic64_t ions;
+#endif
 	/*
 	 * Time slack values; these are used to round up poll() and
 	 * select() etc timeout values. These are in nanoseconds.
@@ -1455,6 +1474,14 @@ struct task_struct {
 	/* Used by LSM modules for access restriction: */
 	void				*security;
 #endif
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	int ux_state;
+	atomic64_t inherit_ux;
+	struct list_head ux_entry;
+	int ux_depth;
+	u64 enqueue_time;
+	u64 inherit_ux_start;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 #ifdef CONFIG_GCC_PLUGIN_STACKLEAK
 	unsigned long			lowest_stack;
@@ -1471,6 +1498,20 @@ struct task_struct {
 	ANDROID_KABI_RESERVE(6);
 	ANDROID_KABI_RESERVE(7);
 	ANDROID_KABI_RESERVE(8);
+
+#ifdef CONFIG_OPLUS_FEATURE_UID_PERF
+#define UID_PERF_EVENTS 3
+	struct perf_event* uid_pevents[UID_PERF_EVENTS];
+	long long uid_counts[UID_PERF_EVENTS];
+	long long uid_prev_counts[UID_PERF_EVENTS];
+	long long uid_leaving_counts[UID_PERF_EVENTS];
+
+	/* define for grouping info */
+#define UID_GROUP_SIZE 8
+	long long uid_group[UID_GROUP_SIZE];
+	long long uid_group_prev_counts[UID_GROUP_SIZE];
+	long long uid_group_snapshot_prev_counts[UID_GROUP_SIZE];
+#endif
 
 	/*
 	 * New fields for task_struct should be added above here, so that
@@ -1888,12 +1929,17 @@ extern void kick_process(struct task_struct *tsk);
 #else
 static inline void kick_process(struct task_struct *tsk) { }
 #endif
-
+#ifdef CONFIG_CAMERA_OPT
+extern void set_camera_opt(struct task_struct *tsk);
+#endif 
 extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec);
 
 static inline void set_task_comm(struct task_struct *tsk, const char *from)
 {
 	__set_task_comm(tsk, from, false);
+#ifdef CONFIG_CAMERA_OPT
+	set_camera_opt(tsk);
+#endif
 }
 
 extern char *__get_task_comm(char *to, size_t len, struct task_struct *tsk);

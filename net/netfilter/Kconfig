@@ -1653,6 +1653,11 @@ config NETFILTER_XT_MATCH_U32
 
 	  Details and examples are in the kernel module source.
 
+config OPLUS_FEATURE_XTOWNER_INPUT
+	bool "Add NF_INET_LOCAL_IN for iptables owner match rules"
+	help
+	  Add NF_INET_LOCAL_IN for iptables owner match rules.
+
 endif # NETFILTER_XTABLES
 
 endmenu

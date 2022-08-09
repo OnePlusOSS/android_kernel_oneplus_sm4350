@@ -225,4 +225,10 @@ config BLK_MQ_RDMA
 config BLK_PM
 	def_bool BLOCK && PM
 
+config OPLUS_UFS_DRIVER
+	tristate "oplus ufs driver"
+	default n
+	help
+	  oplus ufs driver.
+
 source "block/Kconfig.iosched"

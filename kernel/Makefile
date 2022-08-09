@@ -12,6 +12,10 @@ obj-y     = fork.o exec_domain.o panic.o \
 	    notifier.o ksysfs.o cred.o reboot.o \
 	    async.o range.o smpboot.o ucount.o
 
+#ifdef CONFIG_OPLUS_FEATURE_PANIC_FLUSH
+obj-$(CONFIG_OPLUS_FEATURE_PANIC_FLUSH) += panic_flush.o
+#endif
+
 obj-$(CONFIG_MODULES) += kmod.o
 obj-$(CONFIG_MULTIUSER) += groups.o
 
@@ -122,8 +126,20 @@ obj-$(CONFIG_RSEQ) += rseq.o
 obj-$(CONFIG_SYSCTL_KUNIT_TEST) += sysctl-test.o
 
 obj-$(CONFIG_GCC_PLUGIN_STACKLEAK) += stackleak.o
+
+#ifdef OPLUS_FEATURE_UIFIRST
+obj-$(CONFIG_OPLUS_FEATURE_UIFIRST) += uifirst/
+#endif /* OPLUS_FEATURE_UIFIRST */
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+obj-$(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) += sched_assist/
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+
 KASAN_SANITIZE_stackleak.o := n
 KCOV_INSTRUMENT_stackleak.o := n
+
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+obj-$(CONFIG_OPLUS_FEATURE_UIFRIST_HEAVYLOAD) += special_opt/
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 $(obj)/configs.o: $(obj)/config_data.gz
 

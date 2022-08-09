@@ -1311,9 +1311,21 @@ config TOUCHSCREEN_IQS5XX
 	  To compile this driver as a module, choose M here: the
 	  module will be called iqs5xx.
 
-source "drivers/input/touchscreen/st/Kconfig"
 
-source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+
+config TOUCHSCREEN_SYNAPTICS_TCM
+	bool "Synaptics TCM Touchscreen Driver"
+	depends on I2C
+	default y
+	help
+	  Say Y here if you have a Synaptics Touchscreen.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_tcm.
+
+#source "drivers/input/touchscreen/oplus_touchscreen/Kconfig"
 
 source "drivers/input/touchscreen/synaptics_tcm/Kconfig"
 
@@ -1331,6 +1343,10 @@ config TOUCHSCREEN_SYNAPTICS_DSX
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
 
+#ifdef OPLUS_FEATURE_TP_BASIC
+source "drivers/input/touchscreen/touch_custom/Kconfig"
+source "drivers/input/touchscreen/oplus_touchscreen_v2/Kconfig"
+#endif /*OPLUS_FEATURE_TP_BASIC*/
 source "drivers/input/touchscreen/nt36xxx/Kconfig"
 
 endif

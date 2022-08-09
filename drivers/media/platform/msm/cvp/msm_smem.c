@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/dma-buf.h>
@@ -76,11 +76,7 @@ static int msm_dma_get_device_address(struct dma_buf *dbuf, u32 align,
 		}
 
 		if (table->sgl) {
-			if (ion_flags & ION_FLAG_CP_CAMERA) {
-				*iova = sg_phys(table->sgl);
-			} else {
-				*iova = table->sgl->dma_address;
-			}
+			*iova = table->sgl->dma_address;
 		} else {
 			dprintk(CVP_ERR, "sgl is NULL\n");
 			rc = -ENOMEM;
@@ -458,8 +454,6 @@ struct context_bank_info *msm_cvp_smem_get_context_bank(bool is_secure,
 		search_str = secure_pixel_cb;
 	else if (ion_flags & ION_FLAG_CP_NON_PIXEL)
 		search_str = secure_nonpixel_cb;
-	else if (ion_flags & ION_FLAG_CP_CAMERA)
-		search_str = secure_pixel_cb;
 	else
 		search_str = non_secure_cb;
 

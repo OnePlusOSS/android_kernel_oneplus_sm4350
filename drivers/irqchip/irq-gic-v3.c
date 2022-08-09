@@ -18,7 +18,6 @@
 #include <linux/percpu.h>
 #include <linux/refcount.h>
 #include <linux/slab.h>
-#include <linux/suspend.h>
 #include <linux/msm_rtb.h>
 #include <linux/wakeup_reason.h>
 
@@ -36,6 +35,18 @@
 #include <linux/syscore_ops.h>
 
 #include "irq-gic-common.h"
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#include "../../drivers/soc/oplus/oplus_wakelock/oplus_wakelock_profiler_qcom.h"
+#endif
+
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+void (*match_modem_wakeup)(void) = NULL;
+EXPORT_SYMBOL(match_modem_wakeup);
+void (*match_wlan_wakeup)(void) = NULL;
+EXPORT_SYMBOL(match_wlan_wakeup);
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 
 #define GICD_INT_NMI_PRI	(GICD_INT_DEF_PRI & ~0x80)
 
@@ -591,7 +602,9 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 
 	if (!msm_show_resume_irq_mask)
 		return;
-
+	#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+	wakeup_reasons_statics(IRQ_NAME_WAKE_SUM, WS_CNT_SUM);
+	#endif
 	for (i = 0; i * 32 < GIC_LINE_NR; i++) {
 		enabled = readl_relaxed(base + GICD_ICENABLER + i * 4);
 		pending[i] = readl_relaxed(base + GICD_ISPENDR + i * 4);
@@ -605,18 +618,39 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		struct irq_desc *desc = irq_to_desc(irq);
 		const char *name = "null";
 
-		if (i < 32)
-			continue;
-
 		if (desc == NULL)
 			name = "stray irq";
 		else if (desc->action && desc->action->name)
 			name = desc->action->name;
-		else if (desc->irq_data.chip && desc->irq_data.chip->name)
-			name = desc->irq_data.chip->name;
+
+
+		pr_warn("%s: %d triggered %s\n", __func__, irq, name);
 
 		pr_warn("%s: irq:%d hwirq:%u triggered %s\n",
 			 __func__, irq, i, name);
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		if ((strncmp(name, "ipcc_0", strlen("ipcc_0")) == 0)|| 
+		(strncmp(name, "modem", strlen("modem")) == 0)||
+		(strncmp(name, "glink-native-modem", strlen("glink-native-modem")) == 0)||
+		(strncmp(name, "msi_modem_irq", strlen("msi_modem_irq")) == 0)||
+		(strncmp(name, "ipa", strlen("ipa")) == 0)||
+		(strncmp(name, "qmi", strlen("qmi")) == 0)){
+			if (match_modem_wakeup != NULL) {
+				match_modem_wakeup();
+			}
+		} else if ((strncmp(name, "WLAN", strlen("WLAN")) == 0)|| 
+		(strncmp(name, "msi_wlan_irq", strlen("msi_wlan_irq")) == 0)) {
+			if (match_wlan_wakeup != NULL) {
+				match_wlan_wakeup();
+			}
+		}
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		do {
+			wakeup_reasons_statics(name, WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
+		} while(0);
+		#endif
 	}
 }
 
@@ -1249,13 +1283,6 @@ static int gic_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 #define gic_set_affinity	NULL
 #define gic_smp_init()		do { } while(0)
 #endif
-
-#ifdef CONFIG_QGKI_SHOW_S2IDLE_WAKE_IRQ
-void gic_s2idle_wake(void)
-{
-	gic_resume_one(&gic_data);
-}
-#endif /* CONFIG_QGKI_SHOW_S2IDLE_WAKE_IRQ */
 
 #ifdef CONFIG_CPU_PM
 static int gic_cpu_pm_notifier(struct notifier_block *self,

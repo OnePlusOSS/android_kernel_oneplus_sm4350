@@ -50,10 +50,6 @@ static int ip_ping_group_range_max[] = { GID_T_MAX, GID_T_MAX };
 static int comp_sack_nr_max = 255;
 static u32 u32_max_div_HZ = UINT_MAX / HZ;
 static int one_day_secs = 24 * 3600;
-static int tcp_delack_seg_min = TCP_DELACK_MIN;
-static int tcp_delack_seg_max = 60;
-static int tcp_use_userconfig_min;
-static int tcp_use_userconfig_max = 1;
 
 /* obsolete */
 static int sysctl_tcp_low_latency __read_mostly;
@@ -608,25 +604,16 @@ static struct ctl_table ipv4_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_do_static_key,
 	},
+#if IS_ENABLED(CONFIG_OPLUS_BUG_STABILITY)
+//ZhaoMengqingCONNECTIVITY.WIFI.INTERNET.1394484, 2019/04/02,add for: When find TCP SYN-ACK Timestamp value error, just do not use Timestamp
 	{
-		.procname	= "tcp_delack_seg",
-		.data		= &sysctl_tcp_delack_seg,
-		.maxlen		= sizeof(sysctl_tcp_delack_seg),
-		.mode		= 0644,
-		.proc_handler	= tcp_proc_delayed_ack_control,
-		.extra1		= &tcp_delack_seg_min,
-		.extra2		= &tcp_delack_seg_max,
+		.procname	= "tcp_timestamps_control",
+		.data		= &sysctl_tcp_ts_control,
+		.maxlen		= sizeof(sysctl_tcp_ts_control),
+		.mode		= 0664,
+		.proc_handler	= proc_dointvec
 	},
-	{
-		.procname       = "tcp_use_userconfig",
-		.data           = &sysctl_tcp_use_userconfig,
-		.maxlen         = sizeof(sysctl_tcp_use_userconfig),
-		.mode           = 0644,
-		.proc_handler   = tcp_use_userconfig_sysctl_handler,
-		.extra1		= &tcp_use_userconfig_min,
-		.extra2		= &tcp_use_userconfig_max,
-	},
-
+#endif /* CONFIG_OPLUS_BUG_STABILITY */
 	{ }
 };
 
@@ -1101,6 +1088,15 @@ static struct ctl_table ipv4_net_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec
 	},
+#if IS_ENABLED(CONFIG_OPLUS_BUG_STABILITY)
+	{
+		.procname	= "tcp_random_timestamp",
+		.data		= &init_net.ipv4.sysctl_tcp_random_timestamp,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
+#endif /* CONFIG_OPLUS_BUG_STABILITY */
 	{
 		.procname	= "tcp_early_retrans",
 		.data		= &init_net.ipv4.sysctl_tcp_early_retrans,

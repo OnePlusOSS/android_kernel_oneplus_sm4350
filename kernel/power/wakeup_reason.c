@@ -27,7 +27,9 @@
 #include <linux/notifier.h>
 #include <linux/suspend.h>
 #include <linux/slab.h>
-
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#include "../../drivers/soc/oplus/oplus_wakelock/oplus_wakelock_profiler_qcom.h"
+#endif
 /*
  * struct wakeup_irq_node - stores data and relationships for IRQs logged as
  * either base or nested wakeup reasons during suspend/resume flow.
@@ -290,8 +292,15 @@ static void print_wakeup_sources(void)
 				n->irq_name);
 	else if (wakeup_reason == RESUME_ABNORMAL)
 		pr_info("Resume caused by %s\n", non_irq_wake_reason);
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY) || !defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
 	else
 		pr_info("Resume cause unknown\n");
+#else
+	else {
+		pr_info("Resume cause unknown\n");
+		wakeup_reasons_statics("qmi", WS_CNT_MODEM);
+	}
+#endif
 
 	spin_unlock_irqrestore(&wakeup_reason_lock, flags);
 }

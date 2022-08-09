@@ -586,7 +586,11 @@ static ssize_t slave_pct_store(struct class *c, struct class_attribute *attr,
 	if (kstrtoul(ubuf, 10, &val))
 		return -EINVAL;
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	chip->slave_pct = val;
+#else
+	chip->slave_pct = 55;
+#endif
 
 	rc = validate_parallel_icl(chip, &disable);
 	if (rc < 0)
@@ -1981,7 +1985,12 @@ static void status_change_work(struct work_struct *work)
 	 * re-run election for FCC/FV/ICL to ensure all
 	 * votes are reflected on hardware
 	 */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (!IS_USBIN(chip->pl_mode))
+		rerun_election(chip->usb_icl_votable);
+#else
 	rerun_election(chip->usb_icl_votable);
+#endif
 	rerun_election(chip->fcc_votable);
 	rerun_election(chip->fv_votable);
 
@@ -2091,7 +2100,11 @@ int qcom_batt_init(struct device *dev, struct charger_param *chg_param)
 	chip->dev = dev;
 	qcom_batt_create_debugfs(chip);
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	chip->slave_pct = 50;
+#else
+	chip->slave_pct = 55;
+#endif
 	chip->chg_param = chg_param;
 	pl_config_init(chip, chg_param->smb_version);
 	chip->restricted_current = DEFAULT_RESTRICTED_CURRENT_UA;

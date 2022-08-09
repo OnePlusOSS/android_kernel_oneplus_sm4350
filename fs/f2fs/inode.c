@@ -402,7 +402,9 @@ static int do_read_inode(struct inode *inode)
 
 	/* try to recover cold bit for non-dir inode */
 	if (!S_ISDIR(inode->i_mode) && !is_cold_node(node_page)) {
+#ifdef CONFIG_OPLUS_UFS_DRIVER
 		f2fs_wait_on_page_writeback(node_page, NODE, true, true);
+#endif
 		set_cold_node(node_page, false);
 		set_page_dirty(node_page);
 	}

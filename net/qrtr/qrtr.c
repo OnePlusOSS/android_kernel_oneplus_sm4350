@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
- * Copyright (c) 2013, 2018-2019, 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2018-2019 The Linux Foundation. All rights reserved.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -18,9 +18,17 @@
 
 #include <net/sock.h>
 #include <uapi/linux/sched/types.h>
-#include <soc/qcom/boot_stats.h>
 
 #include "qrtr.h"
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+void (*match_qrtr_service_port)(int type, int id, int port) = NULL;
+EXPORT_SYMBOL(match_qrtr_service_port);
+void (*match_qrtr_wakeup)(int src_node, int src_port, int dst_port, unsigned int arg1, unsigned int arg2) = NULL;
+EXPORT_SYMBOL(match_qrtr_wakeup);
+void (*update_qrtr_flag)(int val) = NULL;
+EXPORT_SYMBOL(update_qrtr_flag);
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 #define QRTR_LOG_PAGE_CNT 4
 #define QRTR_INFO(ctx, x, ...)				\
@@ -41,11 +49,6 @@
 
 #define AID_VENDOR_QRTR	KGIDT_INIT(2906)
 
-#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
-extern bool glink_resume_pkt;
-#endif
-extern unsigned int qrtr_get_service_id(unsigned int node_id,
-					unsigned int port_id);
 /**
  * struct qrtr_hdr_v1 - (I|R)PCrouter packet header version 1
  * @version: protocol version
@@ -232,6 +235,12 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 	if (!hdr || !skb)
 		return;
 
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (update_qrtr_flag != NULL) {
+		update_qrtr_flag(0);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 	type = le32_to_cpu(hdr->type);
 	if (type == QRTR_TYPE_DATA) {
 		skb_copy_bits(skb, QRTR_HDR_MAX_SIZE, &pl_buf, sizeof(pl_buf));
@@ -246,12 +255,26 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 		skb_copy_bits(skb, QRTR_HDR_MAX_SIZE, &pkt, sizeof(pkt));
 		if (type == QRTR_TYPE_NEW_SERVER ||
 		    type == QRTR_TYPE_DEL_SERVER)
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		{
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
 				  type, le32_to_cpu(pkt.server.service),
 				  le32_to_cpu(pkt.server.instance),
 				  le32_to_cpu(pkt.server.node),
 				  le32_to_cpu(pkt.server.port));
+			if (match_qrtr_service_port != NULL) {
+				match_qrtr_service_port(hdr->type, le32_to_cpu(pkt.server.service), le32_to_cpu(pkt.server.port));
+			}
+		}
+		#else
+			QRTR_INFO(node->ilc,
+				  "TX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
+				  type, le32_to_cpu(pkt.server.service),
+				  le32_to_cpu(pkt.server.instance),
+				  le32_to_cpu(pkt.server.node),
+				  le32_to_cpu(pkt.server.port));
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 		else if (type == QRTR_TYPE_DEL_CLIENT ||
 			 type == QRTR_TYPE_RESUME_TX)
 			QRTR_INFO(node->ilc,
@@ -259,40 +282,16 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 				  type, le32_to_cpu(pkt.client.node),
 				  le32_to_cpu(pkt.client.port));
 		else if (type == QRTR_TYPE_HELLO ||
-			 type == QRTR_TYPE_BYE) {
+			 type == QRTR_TYPE_BYE)
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x node[0x%x]\n",
 				  type, hdr->src_node_id);
-			if (le32_to_cpu(hdr->dst_node_id) == 0 ||
-			    le32_to_cpu(hdr->dst_node_id) == 3) {
-				place_marker("M - Modem QMI Readiness TX");
-				pr_err("qrtr: Modem QMI Readiness TX cmd:0x%x node[0x%x]\n",
-				       type, hdr->src_node_id);
-			}
-		}
 		else if (type == QRTR_TYPE_DEL_PROC)
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x node[0x%x]\n",
 				  type, pkt.proc.node);
 	}
 }
-
-#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
-static void qrtr_log_resume_pkt(struct qrtr_cb *cb, u64 pl_buf)
-{
-	unsigned int service_id;
-
-	if (glink_resume_pkt) {
-		glink_resume_pkt = false;
-		service_id = qrtr_get_service_id(cb->src_node, cb->src_port);
-		pr_info("[QRTR RESUME PKT]:src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]: service[0x%x]\n",
-			cb->src_node, cb->src_port,
-			cb->dst_node, cb->dst_port,
-			(unsigned int)pl_buf, (unsigned int)(pl_buf >> 32),
-			service_id);
-	}
-}
-#endif
 
 static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 {
@@ -307,24 +306,40 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 
 	if (cb->type == QRTR_TYPE_DATA) {
 		skb_copy_bits(skb, 0, &pl_buf, sizeof(pl_buf));
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		if (match_qrtr_wakeup != NULL) {
+			match_qrtr_wakeup(cb->src_node, cb->src_port, cb->dst_port, (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
+		}
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 		QRTR_INFO(node->ilc,
 			  "RX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]\n",
 			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
 			  cb->dst_node, cb->dst_port,
 			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
-#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
-		qrtr_log_resume_pkt(cb, pl_buf);
-#endif
 	} else {
 		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 		if (cb->type == QRTR_TYPE_NEW_SERVER ||
 		    cb->type == QRTR_TYPE_DEL_SERVER)
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		{
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
 				  cb->type, le32_to_cpu(pkt.server.service),
 				  le32_to_cpu(pkt.server.instance),
 				  le32_to_cpu(pkt.server.node),
 				  le32_to_cpu(pkt.server.port));
+			if (match_qrtr_service_port != NULL) {
+				match_qrtr_service_port(cb->type, le32_to_cpu(pkt.server.service), le32_to_cpu(pkt.server.port));
+			}
+		}
+		#else
+			QRTR_INFO(node->ilc,
+				  "RX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
+				  cb->type, le32_to_cpu(pkt.server.service),
+				  le32_to_cpu(pkt.server.instance),
+				  le32_to_cpu(pkt.server.node),
+				  le32_to_cpu(pkt.server.port));
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 		else if (cb->type == QRTR_TYPE_DEL_CLIENT ||
 			 cb->type == QRTR_TYPE_RESUME_TX)
 			QRTR_INFO(node->ilc,
@@ -332,16 +347,10 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 				  cb->type, le32_to_cpu(pkt.client.node),
 				  le32_to_cpu(pkt.client.port));
 		else if (cb->type == QRTR_TYPE_HELLO ||
-			 cb->type == QRTR_TYPE_BYE) {
+			 cb->type == QRTR_TYPE_BYE)
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x node[0x%x]\n",
 				  cb->type, cb->src_node);
-			if (cb->src_node == 0 || cb->src_node == 3) {
-				place_marker("M - Modem QMI Readiness RX");
-				pr_err("qrtr: Modem QMI Readiness RX cmd:0x%x node[0x%x]\n",
-				       cb->type, cb->src_node);
-			}
-		}
 	}
 }
 
@@ -409,7 +418,7 @@ static void __qrtr_node_release(struct kref *kref)
 			kfree(waiter);
 		}
 		radix_tree_iter_delete(&node->qrtr_tx_flow, &iter, slot);
-		kfree(flow);
+		kfree(*slot);
 	}
 	mutex_unlock(&node->qrtr_tx_lock);
 
@@ -938,7 +947,7 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 			goto err;
 
 		/* Force wakeup for all packets except for sensors */
-		if (node->nid != 9)
+		if (node->nid != 9 && node->nid != 5)
 			pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
 
 		qrtr_port_put(ipc);
@@ -1782,10 +1791,10 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 	struct qrtr_cb *cb;
 	int copied, rc;
 
-	if (sock_flag(sk, SOCK_ZAPPED)) {
-		pr_err("%s: Invalid addr error\n", __func__);
+
+	if (sock_flag(sk, SOCK_ZAPPED))
 		return -EADDRNOTAVAIL;
-	}
+
 	skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT,
 				flags & MSG_DONTWAIT, &rc);
 	if (!skb)
@@ -1801,10 +1810,8 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 	}
 
 	rc = skb_copy_datagram_msg(skb, 0, msg, copied);
-	if (rc < 0) {
-		pr_err("%s: Failed to copy skb rc[%d]\n", __func__, rc);
+	if (rc < 0)
 		goto out;
-	}
 	rc = copied;
 
 	if (addr) {

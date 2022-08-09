@@ -918,22 +918,13 @@ static void mhi_netdev_create_debugfs_dir(void)
 	dentry = debugfs_create_dir(MHI_NETDEV_DRIVER_NAME, 0);
 }
 
-static void mhi_netdev_debugfs_remove(void)
-{
-	debugfs_remove_recursive(dentry);
-}
-
 #else
 
-static void mhi_netdev_create_debugfs(struct mhi_netdev *mhi_netdev)
+static void mhi_netdev_create_debugfs(struct mhi_netdev_private *mhi_netdev)
 {
 }
 
 static void mhi_netdev_create_debugfs_dir(void)
-{
-}
-
-static void mhi_netdev_debugfs_remove(void)
 {
 }
 
@@ -1150,7 +1141,8 @@ module_init(mhi_netdev_init);
 
 static void __exit mhi_netdev_exit(void)
 {
-	mhi_netdev_debugfs_remove();
+	debugfs_remove_recursive(dentry);
+
 	mhi_driver_unregister(&mhi_netdev_driver);
 }
 module_exit(mhi_netdev_exit);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -98,9 +98,6 @@ int smb5_iio_get_prop(struct smb_charger *chg, int channel, int *val)
 		break;
 	case PSY_IIO_MOISTURE_DETECTED:
 		*val = chg->moisture_present;
-		break;
-	case PSY_IIO_MOISTURE_DETECTION_EN:
-		*val = !chg->lpd_disabled;
 		break;
 	case PSY_IIO_HVDCP_OPTI_ALLOWED:
 		*val = !chg->flash_active;
@@ -266,6 +263,11 @@ int smb5_iio_get_prop(struct smb_charger *chg, int channel, int *val)
 	case PSY_IIO_TYPEC_ACCESSORY_MODE:
 		rc = smblib_get_usb_prop_typec_accessory_mode(chg, val);
 		break;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	case PSY_IIO_PD_SDP:
+		*val = chg->pd_sdp;
+		break;
+#endif
 	default:
 		pr_err("get prop %d is not supported\n", channel);
 		rc = -EINVAL;
@@ -307,8 +309,13 @@ int smb5_iio_set_prop(struct smb_charger *chg, int channel, int val)
 		chg->system_suspend_supported = val;
 		break;
 	case PSY_IIO_CTM_CURRENT_MAX:
+#ifndef OPLUS_FEATURE_CHG_BASIC
 		rc = vote(chg->usb_icl_votable, CTM_VOTER,
 						val >= 0, val);
+#else
+		rc = vote(chg->usb_icl_votable, CTM_VOTER,
+						false, val);
+#endif
 		break;
 	case PSY_IIO_PR_SWAP:
 		rc = smblib_set_prop_pr_swap_in_progress(chg, val);
@@ -351,9 +358,6 @@ int smb5_iio_set_prop(struct smb_charger *chg, int channel, int val)
 		del_timer_sync(&chg->apsd_timer);
 		chg->apsd_ext_timeout = false;
 		smblib_rerun_apsd(chg);
-		break;
-	case PSY_IIO_MOISTURE_DETECTION_EN:
-		smblib_moisture_detection_enable(chg, val);
 		break;
 	/* MAIN */
 	case PSY_IIO_FLASH_ACTIVE:
@@ -490,6 +494,12 @@ int smb5_iio_set_prop(struct smb_charger *chg, int channel, int val)
 	case PSY_IIO_FCC_STEPPER_ENABLE:
 		chg->fcc_stepper_enable = val;
 		break;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	case PSY_IIO_PD_SDP:
+		pr_err("PSY_IIO_PD_SDP: %d \n", val);
+		chg->pd_sdp = val;
+		break;
+#endif
 	default:
 		pr_err("get prop %d is not supported\n", channel);
 		rc = -EINVAL;

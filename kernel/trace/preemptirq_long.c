@@ -29,8 +29,7 @@ static unsigned int one_million = 1000000;
 static DEFINE_PER_CPU(u64, irq_disabled_ts);
 static DEFINE_PER_CPU(u64, preempt_disabled_ts);
 
-static void __attribute__((__unused__))
-	note_irq_disable(void *u1, unsigned long u2, unsigned long u3)
+static void note_irq_disable(void *u1, unsigned long u2, unsigned long u3)
 {
 	if (is_idle_task(current))
 		return;
@@ -42,8 +41,7 @@ static void __attribute__((__unused__))
 	this_cpu_write(irq_disabled_ts, sched_clock());
 }
 
-static void __attribute__((__unused__))
-	test_irq_disable_long(void *u1, unsigned long u2, unsigned long u3)
+static void test_irq_disable_long(void *u1, unsigned long u2, unsigned long u3)
 {
 	u64 ts = this_cpu_read(irq_disabled_ts);
 
@@ -71,14 +69,12 @@ static void __attribute__((__unused__))
 	}
 }
 
-static void __attribute__((__unused__))
-	note_preempt_disable(void *u1, unsigned long u2, unsigned long u3)
+static void note_preempt_disable(void *u1, unsigned long u2, unsigned long u3)
 {
 	this_cpu_write(preempt_disabled_ts, sched_clock());
 }
 
-static void __attribute__((__unused__))
-	test_preempt_disable_long(void *u1, unsigned long u2,
+static void test_preempt_disable_long(void *u1, unsigned long u2,
 				      unsigned long u3)
 {
 	u64 ts = this_cpu_read(preempt_disabled_ts);

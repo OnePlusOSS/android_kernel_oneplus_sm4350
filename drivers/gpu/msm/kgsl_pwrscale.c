@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/devfreq_cooling.h>
@@ -122,7 +122,6 @@ void kgsl_pwrscale_update_stats(struct kgsl_device *device)
 
 	if (device->state == KGSL_STATE_ACTIVE) {
 		struct kgsl_power_stats stats;
-		ktime_t cur_time = ktime_get();
 
 		device->ftbl->power_stats(device, &stats);
 		device->pwrscale.accum_stats.busy_time += stats.busy_time;
@@ -130,9 +129,6 @@ void kgsl_pwrscale_update_stats(struct kgsl_device *device)
 		device->pwrscale.accum_stats.ram_wait += stats.ram_wait;
 		pwrctrl->clock_times[pwrctrl->active_pwrlevel] +=
 				stats.busy_time;
-		pwrctrl->time_in_pwrlevel[pwrctrl->active_pwrlevel] +=
-			ktime_us_delta(cur_time, pwrctrl->last_stat_updated);
-		pwrctrl->last_stat_updated = cur_time;
 	}
 }
 
@@ -658,8 +654,7 @@ static int opp_notify(struct notifier_block *nb,
 			min_level = level;
 	}
 
-	pwr->cooling_thermal_pwrlevel = max_level;
-	pwr->thermal_pwrlevel = max(pwr->cooling_thermal_pwrlevel, pwr->sysfs_thermal_pwrlevel);
+	pwr->thermal_pwrlevel = max_level;
 	pwr->thermal_pwrlevel_floor = min_level;
 
 	/* Update the current level using the new limit */
@@ -860,13 +855,6 @@ int kgsl_pwrscale_init(struct kgsl_device *device, struct platform_device *pdev,
 			adreno_tz_data.bus.floating = false;
 	}
 
-	pwrscale->devfreq_wq = create_freezable_workqueue("kgsl_devfreq_wq");
-	if (!pwrscale->devfreq_wq) {
-		dev_err(device->dev, "Failed to allocate kgsl devfreq workqueue\n");
-		device->pwrscale.enabled = false;
-		return -ENOMEM;
-	}
-
 	devfreq = devfreq_add_device(&pdev->dev, &gpu_profile->profile,
 			governor, &adreno_tz_data);
 	if (IS_ERR(devfreq)) {
@@ -887,7 +875,11 @@ int kgsl_pwrscale_init(struct kgsl_device *device, struct platform_device *pdev,
 
 	ret = sysfs_create_link(&device->dev->kobj,
 			&devfreq->dev.kobj, "devfreq");
-
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	pwrscale->devfreq_wq = alloc_workqueue("%s", __WQ_LEGACY | WQ_FREEZABLE | WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_UX, 1, "kgsl_devfreq_wq");
+#else
+	pwrscale->devfreq_wq = create_freezable_workqueue("kgsl_devfreq_wq");
+#endif
 	INIT_WORK(&pwrscale->devfreq_suspend_ws, do_devfreq_suspend);
 	INIT_WORK(&pwrscale->devfreq_resume_ws, do_devfreq_resume);
 	INIT_WORK(&pwrscale->devfreq_notify_ws, do_devfreq_notify);
@@ -934,13 +926,8 @@ void kgsl_pwrscale_close(struct kgsl_device *device)
 		devfreq_cooling_unregister(pwrscale->cooling_dev);
 
 	kgsl_pwrscale_midframe_timer_cancel(device);
-
-	if (pwrscale->devfreq_wq) {
-		flush_workqueue(pwrscale->devfreq_wq);
-		destroy_workqueue(pwrscale->devfreq_wq);
-		pwrscale->devfreq_wq = NULL;
-	}
-
+	flush_workqueue(pwrscale->devfreq_wq);
+	destroy_workqueue(pwrscale->devfreq_wq);
 	devfreq_remove_device(device->pwrscale.devfreqptr);
 	kfree(kgsl_midframe);
 	kgsl_midframe = NULL;

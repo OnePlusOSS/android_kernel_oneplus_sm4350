@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2016-2017, Linaro Ltd
- * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/idr.h>
@@ -23,7 +23,6 @@
 #include <linux/kthread.h>
 #include <linux/mailbox_client.h>
 #include <linux/ipc_logging.h>
-#include <linux/suspend.h>
 #include <soc/qcom/subsystem_notif.h>
 
 #include "rpmsg_internal.h"
@@ -45,7 +44,7 @@ do {									     \
 	if (ch->glink) {						     \
 		ipc_log_string(ch->glink->ilc, "%s[%d:%d] %s: "x, ch->name,  \
 			       ch->lcid, ch->rcid, __func__, ##__VA_ARGS__); \
-		dev_err_ratelimited(ch->glink->dev, "[%s]: "x, __func__, ##__VA_ARGS__); \
+		dev_err(ch->glink->dev, "[%s]: "x, __func__, ##__VA_ARGS__); \
 	}								     \
 } while (0)
 
@@ -54,10 +53,6 @@ do {									     \
 
 #define RPM_GLINK_CID_MIN	1
 #define RPM_GLINK_CID_MAX	65536
-
-static int should_wake;
-int glink_resume_pkt;
-EXPORT_SYMBOL(glink_resume_pkt);
 
 struct glink_msg {
 	__le16 cmd;
@@ -166,7 +161,6 @@ struct qcom_glink {
 	bool sent_read_notify;
 
 	void *ilc;
-	struct cpumask cpu_mask;
 };
 
 enum {
@@ -198,10 +192,8 @@ enum {
  * @open_req:	completed once open-request has been received
  * @intent_req_lock: Synchronises multiple intent requests
  * @intent_req_result: Result of intent request
- * @intent_req_acked: Status of intent request acknowledgment
- * @intent_req_completed: Status of intent request completion
- * @intent_req_ack: Waitqueue for @intent_req_acked
- * @intent_req_comp: Waitqueue for @intent_req_completed
+ * @intent_req_comp: Status of intent request completion
+ * @intent_req_event: Waitqueue for @intent_req_comp
  * @lsigs:	local side signals
  * @rsigs:	remote side signals
  */
@@ -235,10 +227,8 @@ struct glink_channel {
 	struct mutex intent_req_lock;
 	bool intent_req_result;
 	bool channel_ready;
-	atomic_t intent_req_acked;
-	atomic_t intent_req_completed;
-	wait_queue_head_t intent_req_ack;
-	wait_queue_head_t intent_req_comp;
+	atomic_t intent_req_comp;
+	wait_queue_head_t intent_req_event;
 
 	unsigned int lsigs;
 	unsigned int rsigs;
@@ -292,10 +282,8 @@ static struct glink_channel *qcom_glink_alloc_channel(struct qcom_glink *glink,
 
 	init_completion(&channel->open_req);
 	init_completion(&channel->open_ack);
-	atomic_set(&channel->intent_req_acked, 0);
-	atomic_set(&channel->intent_req_completed, 0);
-	init_waitqueue_head(&channel->intent_req_ack);
-	init_waitqueue_head(&channel->intent_req_comp);
+	atomic_set(&channel->intent_req_comp, 0);
+	init_waitqueue_head(&channel->intent_req_event);
 
 	INIT_LIST_HEAD(&channel->done_intents);
 	kthread_init_work(&channel->intent_work, qcom_glink_rx_done_work);
@@ -317,11 +305,7 @@ static void qcom_glink_channel_release(struct kref *ref)
 	int iid;
 
 	CH_INFO(channel, "\n");
-	channel->intent_req_result = false;
-	atomic_inc(&channel->intent_req_acked);
-	wake_up(&channel->intent_req_ack);
-	atomic_inc(&channel->intent_req_completed);
-	wake_up(&channel->intent_req_comp);
+	wake_up(&channel->intent_req_event);
 
 	/* cancel pending rx_done work */
 	kthread_cancel_work_sync(&channel->intent_work);
@@ -512,8 +496,8 @@ static void qcom_glink_handle_intent_req_ack(struct qcom_glink *glink,
 	}
 
 	channel->intent_req_result = granted;
-	atomic_inc(&channel->intent_req_acked);
-	wake_up(&channel->intent_req_ack);
+	atomic_inc(&channel->intent_req_comp);
+	wake_up(&channel->intent_req_event);
 	CH_INFO(channel, "\n");
 }
 
@@ -1070,7 +1054,7 @@ static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
 					channel->ept.priv,
 					RPMSG_ADDR_ANY);
 
-			if (ret < 0 && ret != -ENODEV) {
+			if (ret < 0) {
 				CH_ERR(channel,
 					"callback error ret = %d\n", ret);
 				ret = 0;
@@ -1152,9 +1136,6 @@ static void qcom_glink_handle_intent(struct qcom_glink *glink,
 		if (ret < 0)
 			dev_err(glink->dev, "failed to store remote intent\n");
 	}
-
-	atomic_inc(&channel->intent_req_completed);
-	wake_up(&channel->intent_req_comp);
 
 	kfree(msg);
 	qcom_glink_rx_advance(glink, ALIGN(msglen, 8));
@@ -1260,11 +1241,6 @@ static irqreturn_t qcom_glink_native_intr(int irq, void *data)
 	unsigned int cmd;
 	int ret = 0;
 
-	if (should_wake) {
-		pr_info("%s: %d triggered %s\n", __func__, irq, glink->irqname);
-		glink_resume_pkt = true;
-		pm_system_wakeup();
-	}
 	/* To wakeup any blocking writers */
 	wake_up_all(&glink->tx_avail_notify);
 
@@ -1549,8 +1525,7 @@ static int qcom_glink_request_intent(struct qcom_glink *glink,
 
 	mutex_lock(&channel->intent_req_lock);
 
-	atomic_set(&channel->intent_req_acked, 0);
-	atomic_set(&channel->intent_req_completed, 0);
+	atomic_set(&channel->intent_req_comp, 0);
 
 	cmd.id = RPM_CMD_RX_INTENT_REQ;
 	cmd.cid = channel->lcid;
@@ -1562,11 +1537,11 @@ static int qcom_glink_request_intent(struct qcom_glink *glink,
 	if (ret)
 		goto unlock;
 
-	ret = wait_event_timeout(channel->intent_req_ack,
-				 atomic_read(&channel->intent_req_acked) ||
+	ret = wait_event_timeout(channel->intent_req_event,
+				 atomic_read(&channel->intent_req_comp) ||
 				 atomic_read(&glink->in_reset), 10 * HZ);
 	if (!ret) {
-		dev_err(glink->dev, "intent request ack timed out\n");
+		dev_err(glink->dev, "intent request timed out\n");
 		ret = -ETIMEDOUT;
 	} else if (atomic_read(&glink->in_reset)) {
 		CH_INFO(channel, "ssr detected\n");
@@ -1625,25 +1600,6 @@ static int __qcom_glink_send(struct glink_channel *channel,
 				return -EBUSY;
 
 			ret = qcom_glink_request_intent(glink, channel, len);
-			if (ret < 0)
-				return ret;
-
-			/*Wait for intents to arrive*/
-			ret = wait_event_timeout(channel->intent_req_comp,
-				atomic_read(&channel->intent_req_completed) ||
-				atomic_read(&glink->in_reset), 10 * HZ);
-
-			if (!ret) {
-				dev_err(glink->dev,
-				    "intent request completion timed out\n");
-				ret = -ETIMEDOUT;
-			} else if (atomic_read(&glink->in_reset)) {
-				CH_INFO(channel, "ssr detected\n");
-				ret = -ECONNRESET;
-			} else {
-				ret = channel->intent_req_result ? 0 : -ECANCELED;
-			}
-
 			if (ret < 0)
 				return ret;
 		}
@@ -2044,16 +2000,17 @@ static int qcom_glink_create_chrdev(struct qcom_glink *glink)
 static void qcom_glink_set_affinity(struct qcom_glink *glink, u32 *arr,
 				    size_t size)
 {
+	struct cpumask cpumask;
 	int i;
 
-	cpumask_clear(&glink->cpu_mask);
+	cpumask_clear(&cpumask);
 	for (i = 0; i < size; i++) {
 		if (arr[i] < num_possible_cpus())
-			cpumask_set_cpu(arr[i], &glink->cpu_mask);
+			cpumask_set_cpu(arr[i], &cpumask);
 	}
-	if (irq_set_affinity_hint(glink->irq, &glink->cpu_mask))
+	if (irq_set_affinity_hint(glink->irq, &cpumask))
 		dev_err(glink->dev, "failed to set irq affinity\n");
-	if (set_cpus_allowed_ptr(glink->task, &glink->cpu_mask))
+	if (set_cpus_allowed_ptr(current, &cpumask))
 		dev_err(glink->dev, "failed to set task affinity\n");
 }
 
@@ -2073,8 +2030,7 @@ static void qcom_glink_notif_reset(void *data)
 
 	spin_lock_irqsave(&glink->idr_lock, flags);
 	idr_for_each_entry(&glink->lcids, channel, cid) {
-		wake_up(&channel->intent_req_ack);
-		wake_up(&channel->intent_req_comp);
+		wake_up(&channel->intent_req_event);
 	}
 	spin_unlock_irqrestore(&glink->idr_lock, flags);
 }
@@ -2255,26 +2211,6 @@ void qcom_glink_native_unregister(struct qcom_glink *glink)
 	device_unregister(glink->dev);
 }
 EXPORT_SYMBOL_GPL(qcom_glink_native_unregister);
-
-static int qcom_glink_suspend_no_irq(struct device *dev)
-{
-	should_wake = true;
-
-	return 0;
-}
-
-static int qcom_glink_resume_no_irq(struct device *dev)
-{
-	should_wake = false;
-
-	return 0;
-}
-
-const struct dev_pm_ops glink_native_pm_ops = {
-	.suspend_noirq = qcom_glink_suspend_no_irq,
-	.resume_noirq = qcom_glink_resume_no_irq,
-};
-EXPORT_SYMBOL(glink_native_pm_ops);
 
 MODULE_DESCRIPTION("Qualcomm GLINK driver");
 MODULE_LICENSE("GPL v2");

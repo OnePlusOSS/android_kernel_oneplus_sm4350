@@ -482,6 +482,7 @@ struct mmc_host {
 #define MMC_CAP2_CRYPTO		(1 << 27)	/* Host supports inline encryption */
 #if defined(CONFIG_SDC_QTI)
 #define MMC_CAP2_CLK_SCALE      (1 << 28)       /* Allow dynamic clk scaling */
+#define MMC_CAP2_SLEEP_AWAKE	(1 << 29)	/* Use Sleep/Awake (CMD5) */
 #endif
 
 	int			fixed_drv_type;	/* fixed driver type for non-removable media */
@@ -538,6 +539,9 @@ struct mmc_host {
 
 	struct delayed_work	detect;
 	int			detect_change;	/* card detect flag */
+#ifdef CONFIG_EMMC_SDCARD_OPTIMIZE
+    int detect_change_retry;
+#endif
 	struct mmc_slot		slot;
 
 	const struct mmc_bus_ops *bus_ops;	/* current bus driver */

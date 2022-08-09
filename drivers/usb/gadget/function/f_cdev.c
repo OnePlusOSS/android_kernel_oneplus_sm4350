@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2011, 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2013-2020, The Linux Foundation. All rights reserved.
  * Linux Foundation chooses to take subject only to the GPLv2 license terms,
  * and distributes only under these terms.
  *
@@ -38,7 +38,6 @@
 #include <linux/module.h>
 #include <asm/ioctls.h>
 #include <asm-generic/termios.h>
-#include <linux/usb/dwc3-msm.h>
 
 #define DEVICE_NAME "at_usb"
 #define MODULE_NAME "msm_usb_bridge"
@@ -87,7 +86,7 @@ struct cserial {
 
 struct f_cdev {
 	struct cdev		fcdev_cdev;
-	struct device		dev;
+	struct device		*dev;
 	unsigned int		port_num;
 	char			name[sizeof(DEVICE_NAME) + 2];
 	int			minor;
@@ -100,7 +99,6 @@ struct f_cdev {
 	struct list_head	read_pool;
 	struct list_head	read_queued;
 	struct list_head	write_pool;
-	struct list_head	write_pending;
 
 	/* current active USB RX request */
 	struct usb_request	*current_rx_req;
@@ -112,7 +110,6 @@ struct f_cdev {
 	/* function suspend status */
 	bool			func_is_suspended;
 	bool			func_wakeup_allowed;
-	bool			func_wakeup_pending;
 
 	struct cserial		port_usb;
 
@@ -129,8 +126,6 @@ struct f_cdev {
 	struct workqueue_struct *fcdev_wq;
 	bool			is_connected;
 	bool			port_open;
-	bool			is_suspended;
-	bool			pending_state_notify;
 
 	unsigned long           nbytes_from_host;
 	unsigned long		nbytes_to_host;
@@ -535,61 +530,8 @@ static int usb_cser_set_alt(struct usb_function *f, unsigned int intf,
 		}
 	}
 
-	port->func_wakeup_pending = false;
 	usb_cser_connect(port);
 	return rc;
-}
-
-static int port_notify_serial_state(struct cserial *cser);
-
-static void usb_cser_resume(struct usb_function *f)
-{
-	struct f_cdev *port = func_to_port(f);
-	unsigned long flags;
-	int ret;
-
-	struct usb_request *req, *t;
-	struct usb_ep *in;
-
-	pr_debug("%s\n", __func__);
-	port->is_suspended = false;
-
-	/* process pending state notifications */
-	if (port->pending_state_notify)
-		port_notify_serial_state(&port->port_usb);
-
-	spin_lock_irqsave(&port->port_lock, flags);
-	in = port->port_usb.in;
-	/* process any pending requests */
-	list_for_each_entry_safe(req, t, &port->write_pending, list) {
-		list_del_init(&req->list);
-		if (!port->is_connected) {
-			pr_err("%s: cable is disconnected.\n", __func__);
-			list_add(&req->list, &port->write_pool);
-			spin_unlock_irqrestore(&port->port_lock, flags);
-			return;
-		}
-
-		spin_unlock_irqrestore(&port->port_lock, flags);
-		ret = usb_ep_queue(in, req, GFP_KERNEL);
-		spin_lock_irqsave(&port->port_lock, flags);
-		if (ret) {
-			pr_err("EP QUEUE failed:%d\n", ret);
-				list_add(&req->list, &port->write_pool);
-		} else {
-			port->nbytes_from_port_bridge += req->length;
-		}
-	}
-
-	spin_unlock_irqrestore(&port->port_lock, flags);
-}
-
-static void usb_cser_suspend(struct usb_function *f)
-{
-	struct f_cdev *port = func_to_port(f);
-
-	pr_debug("%s\n", __func__);
-	port->is_suspended = true;
 }
 
 static int usb_cser_func_suspend(struct usb_function *f, u8 options)
@@ -598,29 +540,9 @@ static int usb_cser_func_suspend(struct usb_function *f, u8 options)
 
 	port->func_wakeup_allowed =
 		!!(options & (USB_INTRF_FUNC_SUSPEND_RW >> 8));
+	port->func_is_suspended = options & (USB_INTRF_FUNC_SUSPEND_LP >> 8);
 
-	if (options & (USB_INTRF_FUNC_SUSPEND_LP >> 8)) {
-		if (!port->func_is_suspended) {
-			usb_cser_suspend(f);
-			port->func_is_suspended = true;
-		} else {
-			if (port->func_is_suspended) {
-				port->func_is_suspended = false;
-				usb_cser_resume(f);
-			}
-		}
-	}
 	return 0;
-}
-
-static int usb_cser_get_remote_wakeup_capable(struct usb_function *f,
-					struct usb_gadget *g)
-{
-	struct f_cdev	*port = func_to_port(f);
-
-	return ((g->speed >= USB_SPEED_SUPER && port->func_wakeup_allowed) ||
-			(g->speed < USB_SPEED_SUPER && usb_get_remote_wakeup_status(g)));
-
 }
 
 static int usb_cser_get_status(struct usb_function *f)
@@ -644,9 +566,6 @@ static void usb_cser_disable(struct usb_function *f)
 		"port(%s) deactivated\n", port->name);
 
 	usb_cser_disconnect(port);
-	port->func_is_suspended = false;
-	port->func_wakeup_allowed = false;
-	port->func_wakeup_pending = false;
 	usb_ep_disable(port->port_usb.notify);
 	port->port_usb.notify->driver_data = NULL;
 }
@@ -704,16 +623,7 @@ static int port_notify_serial_state(struct cserial *cser)
 	unsigned long flags;
 	struct usb_composite_dev *cdev = port->port_usb.func.config->cdev;
 
-	if (port->is_suspended) {
-		port->pending_state_notify = true;
-		pr_debug("%s: port is suspended\n", __func__);
-		return 0;
-	}
-
 	spin_lock_irqsave(&port->port_lock, flags);
-	if (port->pending_state_notify)
-		port->pending_state_notify = false;
-
 	if (!port->port_usb.pending) {
 		port->port_usb.pending = true;
 		spin_unlock_irqrestore(&port->port_lock, flags);
@@ -964,16 +874,13 @@ static void cser_free_inst(struct usb_function_instance *fi)
 	opts = container_of(fi, struct f_cdev_opts, func_inst);
 
 	if (opts->port) {
-		cdev_device_del(&opts->port->fcdev_cdev, &opts->port->dev);
-		mutex_lock(&chardev_ida_lock);
-		ida_simple_remove(&chardev_ida, opts->port->minor);
-		mutex_unlock(&chardev_ida_lock);
+		device_destroy(fcdev_classp, MKDEV(major, opts->port->minor));
+		cdev_del(&opts->port->fcdev_cdev);
 		usb_cser_debugfs_exit(opts->port);
-		put_device(&opts->port->dev);
 	}
-
 	usb_cser_chardev_deinit();
 	kfree(opts->func_name);
+	kfree(opts->port);
 	kfree(opts);
 }
 
@@ -1203,7 +1110,6 @@ static void usb_cser_stop_io(struct f_cdev *port)
 	usb_cser_free_requests(out, &port->read_queued);
 	usb_cser_free_requests(out, &port->read_pool);
 	usb_cser_free_requests(in, &port->write_pool);
-	usb_cser_free_requests(in, &port->write_pending);
 	spin_unlock_irqrestore(&port->port_lock, flags);
 }
 
@@ -1214,10 +1120,13 @@ int f_cdev_open(struct inode *inode, struct file *file)
 	struct f_cdev *port;
 
 	port = container_of(inode->i_cdev, struct f_cdev, fcdev_cdev);
-	get_device(&port->dev);
-	if (port->port_open) {
+	if (!port) {
+		pr_err("Port is NULL.\n");
+		return -EINVAL;
+	}
+
+	if (port && port->port_open) {
 		pr_err("port is already opened.\n");
-		put_device(&port->dev);
 		return -EBUSY;
 	}
 
@@ -1227,7 +1136,6 @@ int f_cdev_open(struct inode *inode, struct file *file)
 					port->is_connected);
 	if (ret) {
 		pr_debug("open interrupted.\n");
-		put_device(&port->dev);
 		return ret;
 	}
 
@@ -1247,12 +1155,16 @@ int f_cdev_release(struct inode *inode, struct file *file)
 	struct f_cdev *port;
 
 	port = file->private_data;
+	if (!port) {
+		pr_err("port is NULL.\n");
+		return -EINVAL;
+	}
+
 	spin_lock_irqsave(&port->port_lock, flags);
 	port->port_open = false;
 	port->cbits_updated = false;
 	spin_unlock_irqrestore(&port->port_lock, flags);
 	pr_debug("port(%s)(%pK) is closed.\n", port->name, port);
-	put_device(&port->dev);
 
 	return 0;
 }
@@ -1369,18 +1281,12 @@ ssize_t f_cdev_write(struct file *file,
 	struct list_head *pool;
 	unsigned int xfer_size;
 	struct usb_ep *in;
-	struct cserial *cser;
-	struct usb_function *func;
-	struct usb_gadget *gadget;
 
 	port = file->private_data;
 	if (!port) {
 		pr_err("port is NULL.\n");
 		return -EINVAL;
 	}
-
-	cser = &port->port_usb;
-	func = &cser->func;
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	pr_debug("write on port(%s)(%pK)\n", port->name, port);
@@ -1413,40 +1319,9 @@ ssize_t f_cdev_write(struct file *file,
 	if (ret) {
 		pr_err("copy_from_user failed: err %d\n", ret);
 		ret = -EFAULT;
-		goto err_exit;
-	}
-
-	req->length = xfer_size;
-	req->zero = 1;
-	if (port->is_suspended) {
-		gadget = cser->func.config->cdev->gadget;
-		if (!usb_cser_get_remote_wakeup_capable(func, gadget)) {
-			pr_debug("%s remote-wakeup not capable\n",
-							__func__);
-			ret = -EOPNOTSUPP;
-			goto err_exit;
-		}
-
-		spin_lock_irqsave(&port->port_lock, flags);
-		list_add(&req->list, &port->write_pending);
-		spin_unlock_irqrestore(&port->port_lock, flags);
-
-		if (gadget->speed >= USB_SPEED_SUPER
-		    && port->func_is_suspended)
-			ret = usb_func_wakeup(func);
-		else
-			ret = usb_gadget_wakeup(gadget);
-
-		if (ret < 0 && ret != -EACCES && ret != -EAGAIN) {
-			pr_err("Remote wakeup failed:%d\n", ret);
-			spin_lock_irqsave(&port->port_lock, flags);
-			req = list_first_entry(&port->write_pending,
-					struct usb_request, list);
-			list_del(&req->list);
-			spin_unlock_irqrestore(&port->port_lock, flags);
-			goto err_exit;
-		}
 	} else {
+		req->length = xfer_size;
+		req->zero = 1;
 		ret = usb_ep_queue(in, req, GFP_KERNEL);
 		if (ret) {
 			pr_err("EP QUEUE failed:%d\n", ret);
@@ -1458,18 +1333,19 @@ ssize_t f_cdev_write(struct file *file,
 		spin_unlock_irqrestore(&port->port_lock, flags);
 	}
 
-	return xfer_size;
-
 err_exit:
-	spin_lock_irqsave(&port->port_lock, flags);
-	/* USB cable is connected, add it back otherwise free request */
-	if (port->is_connected)
-		list_add(&req->list, &port->write_pool);
-	else
-		usb_cser_free_req(in, req);
-	spin_unlock_irqrestore(&port->port_lock, flags);
+	if (ret) {
+		spin_lock_irqsave(&port->port_lock, flags);
+		/* USB cable is connected, add it back otherwise free request */
+		if (port->is_connected)
+			list_add(&req->list, &port->write_pool);
+		else
+			usb_cser_free_req(in, req);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		return ret;
+	}
 
-	return ret;
+	return xfer_size;
 }
 
 static unsigned int f_cdev_poll(struct file *file, poll_table *wait)
@@ -1705,8 +1581,6 @@ int usb_cser_connect(struct f_cdev *port)
 	cser->pending = false;
 	cser->q_again = false;
 	port->is_connected = true;
-	port->pending_state_notify = false;
-	port->is_suspended = false;
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	usb_cser_start_io(port);
@@ -1798,8 +1672,6 @@ static ssize_t cser_rw_write(struct file *file, const char __user *ubuf,
 			port->func_is_suspended) {
 			pr_debug("Calling usb_func_wakeup\n");
 			ret = usb_func_wakeup(func);
-			if (ret == -EAGAIN)
-				port->func_wakeup_pending = true;
 		} else {
 			pr_debug("Calling usb_gadget_wakeup\n");
 			ret = usb_gadget_wakeup(gadget);
@@ -1859,17 +1731,11 @@ static void usb_cser_debugfs_exit(struct f_cdev *port)
 	debugfs_remove_recursive(port->debugfs_root);
 }
 
-static void cdev_device_release(struct device *dev)
-{
-	struct f_cdev *port = container_of(dev, struct f_cdev, dev);
-
-	pr_debug("Free cdev port(%d)\n", port->port_num);
-	kfree(port);
-}
-
 static struct f_cdev *f_cdev_alloc(char *func_name, int portno)
 {
 	int ret;
+	dev_t dev;
+	struct device *device;
 	struct f_cdev *port;
 
 	port = kzalloc(sizeof(struct f_cdev), GFP_KERNEL);
@@ -1908,7 +1774,6 @@ static struct f_cdev *f_cdev_alloc(char *func_name, int portno)
 	INIT_LIST_HEAD(&port->read_pool);
 	INIT_LIST_HEAD(&port->read_queued);
 	INIT_LIST_HEAD(&port->write_pool);
-	INIT_LIST_HEAD(&port->write_pending);
 
 	port->fcdev_wq = create_singlethread_workqueue(port->name);
 	if (!port->fcdev_wq) {
@@ -1920,16 +1785,17 @@ static struct f_cdev *f_cdev_alloc(char *func_name, int portno)
 
 	/* create char device */
 	cdev_init(&port->fcdev_cdev, &f_cdev_fops);
-	device_initialize(&port->dev);
-	port->dev.class = fcdev_classp;
-	port->dev.parent = NULL;
-	port->dev.release = cdev_device_release;
-	port->dev.devt = MKDEV(major, port->minor);
-	dev_set_name(&port->dev, port->name);
-	ret = cdev_device_add(&port->fcdev_cdev, &port->dev);
+	dev = MKDEV(major, port->minor);
+	ret = cdev_add(&port->fcdev_cdev, dev, 1);
 	if (ret) {
 		pr_err("Failed to add cdev for port(%s)\n", port->name);
 		goto err_cdev_add;
+	}
+
+	device = device_create(fcdev_classp, NULL, dev, NULL, port->name);
+	if (IS_ERR(device)) {
+		ret = PTR_ERR(device);
+		goto err_create_dev;
 	}
 
 	usb_cser_debugfs_init(port);
@@ -1938,6 +1804,8 @@ static struct f_cdev *f_cdev_alloc(char *func_name, int portno)
 			port->name, port, port->port_num);
 	return port;
 
+err_create_dev:
+	cdev_del(&port->fcdev_cdev);
 err_cdev_add:
 	destroy_workqueue(port->fcdev_wq);
 err_get_ida:
@@ -2198,8 +2066,6 @@ static struct usb_function *cser_alloc(struct usb_function_instance *fi)
 	port->port_usb.func.disable = usb_cser_disable;
 	port->port_usb.func.setup = usb_cser_setup;
 	port->port_usb.func.func_suspend = usb_cser_func_suspend;
-	port->port_usb.func.resume = usb_cser_resume;
-	port->port_usb.func.suspend = usb_cser_suspend;
 	port->port_usb.func.get_status = usb_cser_get_status;
 	port->port_usb.func.free_func = usb_cser_free_func;
 

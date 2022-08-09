@@ -208,6 +208,7 @@ static void erofs_default_options(struct erofs_sb_info *sbi)
 #ifdef CONFIG_EROFS_FS_POSIX_ACL
 	set_opt(sbi, POSIX_ACL);
 #endif
+
 }
 
 enum {

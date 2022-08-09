@@ -3,7 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.c
  * Copyright (C) 2011-2013 Samsung India Software Operations
- * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -107,7 +107,7 @@
 #define UFSHCD_REF_CLK_GATING_WAIT_US 0xFF /* microsecs */
 
 /* Polling time to wait for fDeviceInit  */
-#define FDEVICEINIT_COMPL_TIMEOUT 5000 /* millisecs */
+#define FDEVICEINIT_COMPL_TIMEOUT 1500 /* millisecs */
 
 #define ufshcd_toggle_vreg(_dev, _vreg, _on)				\
 	({                                                              \
@@ -1014,8 +1014,7 @@ static int ufshcd_set_clk_freq(struct ufs_hba *hba, bool scale_up)
 	list_for_each_entry(clki, head, list) {
 		if (!IS_ERR_OR_NULL(clki->clk)) {
 			if (scale_up && clki->max_freq) {
-				if ((clki->curr_freq == clki->max_freq) ||
-				   (!strcmp(clki->name, "core_clk_ice_hw_ctl")))
+				if (clki->curr_freq == clki->max_freq)
 					continue;
 
 				ret = clk_set_rate(clki->clk, clki->max_freq);
@@ -1033,8 +1032,7 @@ static int ufshcd_set_clk_freq(struct ufs_hba *hba, bool scale_up)
 				clki->curr_freq = clki->max_freq;
 
 			} else if (!scale_up && clki->min_freq) {
-				if ((clki->curr_freq == clki->min_freq) ||
-				   (!strcmp(clki->name, "core_clk_ice_hw_ctl")))
+				if (clki->curr_freq == clki->min_freq)
 					continue;
 
 				ret = clk_set_rate(clki->clk, clki->min_freq);
@@ -2605,9 +2603,16 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		BUG();
 	}
 
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+	if (!down_read_trylock(&hba->clk_scaling_lock)) {
+		hba->ufs_stats.scsi_blk_reqs.ts = ktime_get();
+		hba->ufs_stats.scsi_blk_reqs.busy_ctx = SCALING_BUSY;
+		return SCSI_MLQUEUE_HOST_BUSY;
+	}
+#else
 	if (!down_read_trylock(&hba->clk_scaling_lock))
 		return SCSI_MLQUEUE_HOST_BUSY;
-
+#endif /*CONFIG_OPLUS_UFS_DRIVER*/
 	hba->req_abort_count = 0;
 
 	/* acquire the tag to make sure device cmds don't use it */
@@ -2618,12 +2623,20 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		 * find different tag instead of waiting for dev manage command
 		 * completion.
 		 */
+	#ifdef CONFIG_OPLUS_UFS_DRIVER
+		hba->ufs_stats.scsi_blk_reqs.ts = ktime_get();
+		hba->ufs_stats.scsi_blk_reqs.busy_ctx = LRB_IN_USE;
+	#endif
 		err = SCSI_MLQUEUE_HOST_BUSY;
 		goto out;
 	}
 
 	err = ufshcd_hold(hba, true);
 	if (err) {
+	#ifdef CONFIG_OPLUS_UFS_DRIVER
+		hba->ufs_stats.scsi_blk_reqs.ts = ktime_get();
+		hba->ufs_stats.scsi_blk_reqs.busy_ctx = UFSHCD_HOLD;
+	#endif
 		err = SCSI_MLQUEUE_HOST_BUSY;
 		clear_bit_unlock(tag, &hba->lrb_in_use);
 		goto out;
@@ -2685,6 +2698,10 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		}
 		fallthrough;
 	case UFSHCD_STATE_RESET:
+	#ifdef CONFIG_OPLUS_UFS_DRIVER
+		hba->ufs_stats.scsi_blk_reqs.ts = ktime_get();
+		hba->ufs_stats.scsi_blk_reqs.busy_ctx = UFS_RESET_OR_EH_SCHEDULED;
+	#endif
 		err = SCSI_MLQUEUE_HOST_BUSY;
 		goto out_compl_cmd;
 	case UFSHCD_STATE_ERROR:
@@ -7218,11 +7235,22 @@ static int ufshcd_set_low_vcc_level(struct ufs_hba *hba)
  * Returns zero on success (all required W-LUs are added successfully),
  * non-zero error value on failure (if failed to add any of the required W-LU).
  */
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+int __attribute__((weak)) register_device_proc(char *name, char *version, char *vendor)
+{
+	return 0;
+}
+#endif
 static int ufshcd_scsi_add_wlus(struct ufs_hba *hba)
 {
 	int ret = 0;
 	struct scsi_device *sdev_rpmb;
 	struct scsi_device *sdev_boot;
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+		static char temp_version[5] = {0};
+		static char vendor[9] = {0};
+		static char model[17] = {0};
+#endif
 
 	hba->sdev_ufs_device = __scsi_add_device(hba->host, 0, 0,
 		ufshcd_upiu_wlun_to_scsi_wlun(UFS_UPIU_UFS_DEVICE_WLUN), NULL);
@@ -7256,6 +7284,13 @@ static int ufshcd_scsi_add_wlus(struct ufs_hba *hba)
 remove_sdev_ufs_device:
 	scsi_remove_device(hba->sdev_ufs_device);
 out:
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+	strncpy(temp_version, hba->sdev_ufs_device->rev, 4);
+	strncpy(vendor, hba->sdev_ufs_device->vendor, 8);
+	strncpy(model, hba->sdev_ufs_device->model, 16);
+	register_device_proc("ufs_version", temp_version, vendor);
+	register_device_proc("ufs", model, vendor);
+#endif
 	return ret;
 }
 
@@ -7772,6 +7807,7 @@ static int ufshcd_add_lus(struct ufs_hba *hba)
 
 	ufs_bsg_probe(hba);
 	scsi_scan_host(hba->host);
+	pm_runtime_put_sync(hba->dev);
 
 out:
 	return ret;
@@ -7932,10 +7968,10 @@ out:
 	 * present, turn off the power/clocks etc.
 	 */
 	if (ret) {
+		pm_runtime_put_sync(hba->dev);
 		ufshcd_exit_clk_scaling(hba);
 		ufshcd_hba_exit(hba);
 	}
-	pm_runtime_put_sync(hba->dev);
 }
 
 static enum blk_eh_timer_return ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
@@ -8316,8 +8352,7 @@ static int ufshcd_init_clocks(struct ufs_hba *hba)
 		goto out;
 
 	list_for_each_entry(clki, head, list) {
-		if ((!clki->name) ||
-		   (!strcmp(clki->name, "core_clk_ice_hw_ctl")))
+		if (!clki->name)
 			continue;
 
 		clki->clk = devm_clk_get(dev, clki->name);
@@ -8651,7 +8686,7 @@ static void ufshcd_vreg_set_lpm(struct ufs_hba *hba)
 	} else if (!ufshcd_is_ufs_dev_active(hba)) {
 		ufshcd_toggle_vreg(hba->dev, hba->vreg_info.vcc, false);
 		vcc_off = true;
-		if (ufshcd_is_link_hibern8(hba) || ufshcd_is_link_off(hba)) {
+		if (!ufshcd_is_link_active(hba)) {
 			ufshcd_config_vreg_lpm(hba, hba->vreg_info.vccq);
 			ufshcd_config_vreg_lpm(hba, hba->vreg_info.vccq2);
 		}
@@ -8673,7 +8708,7 @@ static int ufshcd_vreg_set_hpm(struct ufs_hba *hba)
 	    !hba->dev_info.is_lu_power_on_wp) {
 		ret = ufshcd_setup_vreg(hba, true);
 	} else if (!ufshcd_is_ufs_dev_active(hba)) {
-		if (!ufshcd_is_link_active(hba)) {
+		if (!ret && !ufshcd_is_link_active(hba)) {
 			ret = ufshcd_config_vreg_hpm(hba, hba->vreg_info.vccq);
 			if (ret)
 				goto vcc_disable;
@@ -9070,10 +9105,7 @@ int ufshcd_system_suspend(struct ufs_hba *hba)
 	if (!hba || !hba->is_powered)
 		return 0;
 
-	cancel_delayed_work_sync(&hba->rpm_dev_flush_recheck_work);
-
-	if (pm_runtime_suspended(hba->dev) &&
-	    (ufs_get_pm_lvl_to_dev_pwr_mode(hba->spm_lvl) ==
+	if ((ufs_get_pm_lvl_to_dev_pwr_mode(hba->spm_lvl) ==
 	     hba->curr_dev_pwr_mode) &&
 	    (ufs_get_pm_lvl_to_link_pwr_state(hba->spm_lvl) ==
 	     hba->uic_link_state) &&
@@ -9391,9 +9423,8 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	if ((hba->ufs_version != UFSHCI_VERSION_10) &&
 	    (hba->ufs_version != UFSHCI_VERSION_11) &&
 	    (hba->ufs_version != UFSHCI_VERSION_20) &&
-	    (hba->ufs_version != UFSHCI_VERSION_21) &&
-	    (hba->ufs_version != UFSHCI_VERSION_30))
-		dev_err(hba->dev, "invalid UFS controller version 0x%x\n",
+	    (hba->ufs_version != UFSHCI_VERSION_21))
+		dev_err(hba->dev, "invalid UFS version 0x%x\n",
 			hba->ufs_version);
 
 	/* Get Interrupt bit mask per version */

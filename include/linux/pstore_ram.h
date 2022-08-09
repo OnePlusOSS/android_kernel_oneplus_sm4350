@@ -133,9 +133,44 @@ struct ramoops_platform_data {
 	unsigned long	console_size;
 	unsigned long	ftrace_size;
 	unsigned long	pmsg_size;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	unsigned long	device_info_size;
+#endif
 	int		dump_oops;
 	u32		flags;
 	struct persistent_ram_ecc_info ecc_info;
 };
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+struct ramoops_context {
+	struct persistent_ram_zone **dprzs;	/* Oops dump zones */
+	struct persistent_ram_zone *cprz;	/* Console zone */
+	struct persistent_ram_zone **fprzs;	/* Ftrace zones */
+	struct persistent_ram_zone *mprz;	/* PMSG zone */
+	struct persistent_ram_zone *devprz; /* device info zone */
+	phys_addr_t phys_addr;
+	unsigned long size;
+	unsigned int memtype;
+	size_t record_size;
+	size_t console_size;
+	size_t ftrace_size;
+	size_t pmsg_size;
+	size_t device_info_size;
+	int dump_oops;
+	u32 flags;
+	struct persistent_ram_ecc_info ecc_info;
+	unsigned int max_dump_cnt;
+	unsigned int dump_write_cnt;
+	/* _read_cnt need clear on ramoops_pstore_open */
+	unsigned int dump_read_cnt;
+	unsigned int console_read_cnt;
+	unsigned int max_ftrace_cnt;
+	unsigned int ftrace_read_cnt;
+	unsigned int pmsg_read_cnt;
+	unsigned int dev_info_cnt;
+
+	struct pstore_info pstore;
+};
+#endif
 
 #endif

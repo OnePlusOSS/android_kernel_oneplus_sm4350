@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-/* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  * Copyright (C) 2006-2007 Adam Belay <abelay@novell.com>
  * Copyright (C) 2009 Intel Corporation
  */
@@ -31,7 +31,6 @@
 #include <linux/sched/clock.h>
 #include <linux/sched/idle.h>
 #include <linux/sched/stat.h>
-#include <linux/rcupdate.h>
 #include <linux/psci.h>
 #include <soc/qcom/pm.h>
 #include <soc/qcom/lpm_levels.h>
@@ -274,7 +273,6 @@ static uint32_t get_next_event(struct lpm_cpu *cpu)
 
 	return ktime_to_us(ktime_sub(next_event, ktime_get()));
 }
-
 static void disable_rimps_timer(struct lpm_cpu *cpu)
 {
 	uint32_t ctrl_val;
@@ -1117,6 +1115,10 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		 * LPMs (XO and Vmin).
 		 */
 		if (!from_idle) {
+			#ifdef CONFIG_OPLUS_POWER_UTIL
+			extern void oplus_get_clk_stats(void);
+			oplus_get_clk_stats();
+			#endif
 			clock_debug_print_enabled();
 			regulator_debug_print_enabled();
 		}
@@ -1446,8 +1448,8 @@ static void update_history(struct cpuidle_device *dev, int idx)
 
 	history->mode[history->hptr] = idx;
 
-	RCU_NONIDLE(trace_cpu_pred_hist(history->mode[history->hptr],
-		history->resi[history->hptr], history->hptr, tmr));
+	trace_cpu_pred_hist(history->mode[history->hptr],
+		history->resi[history->hptr], history->hptr, tmr);
 
 	if (history->nsamp < MAXSAMPLES)
 		history->nsamp++;
@@ -1473,7 +1475,7 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	cpu_prepare(cpu, idx, true);
 	cluster_prepare(cpu->parent, cpumask, idx, true, start_time);
 
-	RCU_NONIDLE(trace_cpu_idle_enter(idx));
+	trace_cpu_idle_enter(idx);
 	lpm_stats_cpu_enter(idx, start_time);
 
 	if (need_resched() || is_IPI_pending(cpumask_of(dev->cpu)))
@@ -1495,7 +1497,7 @@ exit:
 	cpu_unprepare(cpu, idx, true);
 	dev->last_residency = ktime_us_delta(ktime_get(), start);
 	update_history(dev, idx);
-	RCU_NONIDLE(trace_cpu_idle_exit(idx, ret));
+	trace_cpu_idle_exit(idx, ret);
 	if (lpm_prediction && cpu->lpm_prediction) {
 		histtimer_cancel();
 		clusttimer_cancel();
@@ -1533,7 +1535,7 @@ static int lpm_cpuidle_s2idle(struct cpuidle_device *dev,
 
 	cluster_unprepare(cpu->parent, cpumask, idx, false, 0, success);
 	cpu_unprepare(cpu, idx, true);
-	return ret;
+	return 0;
 }
 
 #ifdef CONFIG_CPU_IDLE_MULTIPLE_DRIVERS
@@ -1745,7 +1747,7 @@ static int lpm_suspend_enter(suspend_state_t state)
 	}
 	if (idx < 0) {
 		pr_err("Failed suspend\n");
-		return -EINVAL;
+		return 0;
 	}
 	cpu_prepare(lpm_cpu, idx, false);
 	cluster_prepare(cluster, cpumask, idx, false, 0);
@@ -1756,7 +1758,7 @@ static int lpm_suspend_enter(suspend_state_t state)
 
 	cluster_unprepare(cluster, cpumask, idx, false, 0, success);
 	cpu_unprepare(lpm_cpu, idx, false);
-	return ret;
+	return 0;
 }
 
 static const struct platform_suspend_ops lpm_suspend_ops = {

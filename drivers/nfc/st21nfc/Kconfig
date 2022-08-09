@@ -1,0 +1,6 @@
+config NFC_ST21NFC
+  tristate "ST Microelectronics ST21NFC NFC Controller Driver"
+  default m
+  ---help---
+      ST Microelectronics ST21NFC Near Field Communication controller
+

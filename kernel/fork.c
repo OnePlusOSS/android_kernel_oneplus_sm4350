@@ -108,6 +108,13 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_fork.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+#ifdef CONFIG_OPLUS_FEATURE_UID_PERF
+extern void uid_perf_work_add(struct task_struct *task, bool force);
+#endif
 
 /*
  * Minimum number of threads to boot the kernel
@@ -1054,6 +1061,11 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	mm->mmap = NULL;
 	mm->mm_rb = RB_ROOT;
 	mm->vmacache_seqnum = 0;
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+	mm->va_feature = 0;
+	mm->va_feature_rnd = 0;
+	mm->zygoteheap_in_MB = 0;
+#endif
 #ifdef CONFIG_SPECULATIVE_PAGE_FAULT
 	rwlock_init(&mm->mm_rb_lock);
 #endif
@@ -2046,6 +2058,9 @@ static __latent_entropy struct task_struct *copy_process(
 	p->sequential_io_avg	= 0;
 #endif
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	init_task_ux_info(p);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	retval = sched_fork(clone_flags, p);
 	if (retval)
@@ -2237,6 +2252,17 @@ static __latent_entropy struct task_struct *copy_process(
 	if (pidfile)
 		fd_install(pidfd, pidfile);
 
+#ifdef CONFIG_OPLUS_FEATURE_UID_PERF
+	/* should init uid pevents before task added into any link */
+	memset(p->uid_pevents, 0, sizeof(struct perf_event *) * UID_PERF_EVENTS);
+	memset(p->uid_counts, 0, sizeof(long long) * UID_PERF_EVENTS);
+	memset(p->uid_prev_counts, 0, sizeof(long long) * UID_PERF_EVENTS);
+	memset(p->uid_leaving_counts, 0, sizeof(long long) * UID_PERF_EVENTS);
+	memset(p->uid_group, 0, sizeof(long long) * UID_GROUP_SIZE);
+	memset(p->uid_group_prev_counts, 0, sizeof(long long) * UID_GROUP_SIZE);
+	memset(p->uid_group_snapshot_prev_counts, 0, sizeof(long long) * UID_GROUP_SIZE);
+#endif
+
 	init_task_pid_links(p);
 	if (likely(p->pid)) {
 		ptrace_init_task(p, (clone_flags & CLONE_PTRACE) || trace);
@@ -2295,6 +2321,10 @@ static __latent_entropy struct task_struct *copy_process(
 
 	copy_oom_score_adj(clone_flags, p);
 
+#ifdef CONFIG_OPLUS_FEATURE_UID_PERF
+	if (!IS_ERR(p))
+		uid_perf_work_add(p, false);
+#endif
 	return p;
 
 bad_fork_cancel_cgroup:
@@ -2444,6 +2474,9 @@ long _do_fork(struct kernel_clone_args *args)
 
 	pid = get_task_pid(p, PIDTYPE_PID);
 	nr = pid_vnr(pid);
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_ION) && defined(CONFIG_DUMP_TASKS_MEM)
+	atomic64_set(&p->ions, 0);
+#endif
 
 	if (clone_flags & CLONE_PARENT_SETTID)
 		put_user(nr, args->parent_tid);

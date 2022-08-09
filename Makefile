@@ -5,10 +5,6 @@ SUBLEVEL = 147
 EXTRAVERSION =
 NAME = Kleptomaniac Octopus
 
-# indicate that change "Kbuild: Support nested composite objects" is
-# present in the kernel so that out-of-tree modules can act upon it
-export KERNEL_SUPPORTS_NESTED_COMPOSITES := y
-
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
 # More info can be located in ./README
@@ -504,6 +500,90 @@ export KBUILD_LDS_MODULE := $(srctree)/scripts/module-common.lds
 KBUILD_LDFLAGS :=
 GCC_PLUGINS_CFLAGS :=
 CLANG_FLAGS :=
+
+
+# ifdef DOPLUS_FEATUREB_BOOT
+KBUILD_CFLAGS +=   -DOPLUS_FEATUREB_BOOT
+KBUILD_CPPFLAGS += -DOPLUS_FEATUREB_BOOT
+CFLAGS_KERNEL +=   -DOPLUS_FEATUREB_BOOT
+CFLAGS_MODULE +=   -DOPLUS_FEATUREB_BOOT
+# # endif /* DOPLUS_FEATUREB_BOOT */
+
+# ifdef OPLUS_BUG_STABILITY
+KBUILD_CFLAGS +=   -DOPLUS_BUG_STABILITY
+KBUILD_CPPFLAGS += -DOPLUS_BUG_STABILITY
+CFLAGS_KERNEL +=   -DOPLUS_BUG_STABILITY
+CFLAGS_MODULE +=   -DOPLUS_BUG_STABILITY
+# endif
+
+# ifdef OPLUS_FEATURE_POWER_CPUFREQ
+KBUILD_CFLAGS +=   -DOPLUS_FEATURE_POWER_CPUFREQ
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_POWER_CPUFREQ
+CFLAGS_KERNEL +=   -DOPLUS_FEATURE_POWER_CPUFREQ
+CFLAGS_MODULE +=   -DOPLUS_FEATURE_POWER_CPUFREQ
+# endif
+
+#ifdef OPLUS_BUG_STABILITY
+ifeq ($(AGING_DEBUG_MASK),1)
+#Agingtest enable rtb
+OPLUS_AGING_TEST := true
+endif
+
+ifeq ($(AGING_DEBUG_MASK),2)
+#enable rtb
+#OPLUS_AGING_TEST := true
+#enable kasan
+OPLUS_KASAN_TEST := true
+endif
+$(warning OPLUS_KASAN_TEST is $(OPLUS_KASAN_TEST))
+
+ifeq ($(AGING_DEBUG_MASK),3)
+#enable rtb
+#OPLUS_AGING_TEST := true
+#enable kasan
+OPLUS_KMEMLEAK_TEST := true
+endif
+
+ifeq ($(AGING_DEBUG_MASK),4)
+#enable rtb
+#OPLUS_AGING_TEST := true
+#enable kasan
+OPLUS_SLUB_TEST := true
+endif
+
+ifeq ($(AGING_DEBUG_MASK),5)
+#enable rtb
+#OPLUS_AGING_TEST := true
+#enable kasan
+OPLUS_PAGEOWNER_TEST := true
+endif
+
+export OPLUS_AGING_TEST OPLUS_KASAN_TEST OPLUS_KMEMLEAK_TEST OPLUS_SLUB_TEST OPLUS_PAGEOWNER_TEST
+#endif
+
+#ifdef OPLUS_FEATURE_MEMLEAK_DETECT
+#Add for memleak test
+ifeq ($(TARGET_MEMLEAK_DETECT_TEST),0)
+OPLUS_MEMLEAK_DETECT := false
+else ifeq ($(TARGET_MEMLEAK_DETECT_TEST),1)
+OPLUS_MEMLEAK_DETECT := true
+endif
+
+#Add for memleak test
+$(warning TARGET_MEMLEAK_DETECT_TEST value is "$(TARGET_MEMLEAK_DETECT_TEST)")
+$(warning OPLUS_MEMLEAK_DETECT value is "$(OPLUS_MEMLEAK_DETECT)")
+export OPLUS_MEMLEAK_DETECT
+#endif
+
+#ifdef OPLUS_FEATURE_BUILD
+-include OplusKernelEnvConfig.mk
+#endif // OPLUS_FEATURE_BUILD
+
+ifneq (,$(findstring Aging,$(SPECIAL_VERSION)))
+OPLUS_F2FS_DEBUG := true
+endif
+
+export OPLUS_F2FS_DEBUG
 
 export ARCH SRCARCH CONFIG_SHELL BASH HOSTCC KBUILD_HOSTCFLAGS CROSS_COMPILE LD CC
 export CPP AR NM STRIP OBJCOPY OBJDUMP OBJSIZE READELF PAHOLE LEX YACC AWK INSTALLKERNEL
@@ -1065,6 +1145,10 @@ export INSTALL_DTBS_PATH ?= $(INSTALL_PATH)/dtbs/$(KERNELRELEASE)
 
 MODLIB	= $(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
 export MODLIB
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+KBUILD_CFLAGS += -DOPLUS_FEATURE_CHG_BASIC
+#endif
 
 #
 # INSTALL_MOD_STRIP, if defined, will cause modules to be

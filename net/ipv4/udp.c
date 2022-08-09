@@ -1931,11 +1931,20 @@ void udp_lib_rehash(struct sock *sk, u16 newhash)
 					     udp_sk(sk)->udp_port_hash);
 			/* we must lock primary chain too */
 			spin_lock_bh(&hslot->lock);
+			if (!sk_hashed(sk)) {
+				spin_unlock_bh(&hslot->lock);
+				return;
+			}
 			if (rcu_access_pointer(sk->sk_reuseport_cb))
 				reuseport_detach_sock(sk);
 
 			if (hslot2 != nhslot2) {
 				spin_lock(&hslot2->lock);
+				if (!sk_hashed(sk)) {
+					spin_unlock(&hslot2->lock);
+					spin_unlock_bh(&hslot->lock);
+					return;
+				}
 				hlist_del_init_rcu(&udp_sk(sk)->udp_portaddr_node);
 				hslot2->count--;
 				spin_unlock(&hslot2->lock);
@@ -2595,12 +2604,9 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 
 	case UDP_GRO:
 		lock_sock(sk);
-
-		/* when enabling GRO, accept the related GSO packet type */
 		if (valbool)
 			udp_tunnel_encap_enable(sk->sk_socket);
 		up->gro_enabled = valbool;
-		up->accept_udp_l4 = valbool;
 		release_sock(sk);
 		break;
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -829,13 +829,16 @@ static int qusb_phy_notify_disconnect(struct usb_phy *phy,
 
 	qphy->cable_connected = false;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	qphy->tune_val = 0;
+#endif
+
 	dev_dbg(phy->dev, "QUSB PHY: connect notification cable_connected=%d\n",
 							qphy->cable_connected);
 	return 0;
 }
 
-#define DP_PULSE_WIDTH_MSEC 200
-static enum usb_charger_type usb_phy_drive_dp_pulse(struct usb_phy *phy)
+void usb_phy_drive_dp_pulse(void *phy, unsigned int interval_ms)
 {
 	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
 	int ret;
@@ -844,7 +847,7 @@ static enum usb_charger_type usb_phy_drive_dp_pulse(struct usb_phy *phy)
 	if (ret < 0) {
 		dev_dbg(qphy->phy.dev,
 			"dpdm regulator enable failed:%d\n", ret);
-		return 0;
+		return;
 	}
 	qusb_phy_enable_clocks(qphy, true);
 	msm_usb_write_readback(qphy->base, qphy->phy_reg[PWR_CTRL1],
@@ -863,7 +866,7 @@ static enum usb_charger_type usb_phy_drive_dp_pulse(struct usb_phy *phy)
 	msm_usb_write_readback(qphy->base, qphy->phy_reg[INTR_CTRL],
 				DPSE_INTR_EN, DPSE_INTR_EN);
 
-	msleep(DP_PULSE_WIDTH_MSEC);
+	msleep(interval_ms);
 
 	msm_usb_write_readback(qphy->base, qphy->phy_reg[INTR_CTRL],
 				DPSE_INTR_HIGH_SEL |
@@ -885,9 +888,8 @@ static enum usb_charger_type usb_phy_drive_dp_pulse(struct usb_phy *phy)
 		dev_dbg(qphy->phy.dev,
 			"dpdm regulator disable failed:%d\n", ret);
 	}
-
-	return 0;
 }
+EXPORT_SYMBOL(usb_phy_drive_dp_pulse);
 
 static int qusb_phy_dpdm_regulator_enable(struct regulator_dev *rdev)
 {
@@ -1318,7 +1320,6 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	qphy->phy.type			= USB_PHY_TYPE_USB2;
 	qphy->phy.notify_connect        = qusb_phy_notify_connect;
 	qphy->phy.notify_disconnect     = qusb_phy_notify_disconnect;
-	qphy->phy.charger_detect	= usb_phy_drive_dp_pulse;
 
 	ret = usb_add_phy_dev(&qphy->phy);
 	if (ret)

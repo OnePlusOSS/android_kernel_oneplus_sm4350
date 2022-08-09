@@ -13,9 +13,6 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/utsname.h>
-#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-#include <soc/qcom/boot_stats.h>
-#endif
 
 #include <linux/usb/composite.h>
 #include <linux/usb/otg.h>
@@ -509,7 +506,8 @@ int usb_func_wakeup(struct usb_function *func)
 		DBG(func->config->cdev,
 			"Function wakeup for %s could not complete due to suspend state. Delayed until after bus resume.\n",
 			func->name ? func->name : "");
-	} else if (ret < 0 && ret != -EOPNOTSUPP) {
+		ret = 0;
+	} else if (ret < 0 && ret != -ENOTSUPP) {
 		ERROR(func->config->cdev,
 			"Failed to wake function %s from suspend state. ret=%d. Canceling USB request.\n",
 			func->name ? func->name : "", ret);
@@ -892,9 +890,6 @@ static int set_config(struct usb_composite_dev *cdev,
 	if (!c)
 		goto done;
 
-#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-	place_marker("M - USB Device is enumerated");
-#endif
 	usb_gadget_set_state(gadget, USB_STATE_CONFIGURED);
 	cdev->config = c;
 
@@ -1696,6 +1691,18 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	struct usb_function		*f = NULL;
 	u8				endp;
 
+	if (w_length > USB_COMP_EP0_BUFSIZ) {
+		if (ctrl->bRequestType & USB_DIR_IN) {
+			/* Cast away the const, we are going to overwrite on purpose. */
+			__le16 *temp = (__le16 *)&ctrl->wLength;
+
+			*temp = cpu_to_le16(USB_COMP_EP0_BUFSIZ);
+			w_length = USB_COMP_EP0_BUFSIZ;
+		} else {
+			goto done;
+		}
+	}
+
 	/* partial re-init of the response message; the function or the
 	 * gadget might need to intercept e.g. a control-OUT completion
 	 * when we delegate to it.
@@ -1762,10 +1769,8 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				value = min(w_length, (u16) value);
 			break;
 		case USB_DT_STRING:
-			spin_lock(&cdev->lock);
 			value = get_string(cdev, req->buf,
 					w_index, w_value & 0xff);
-			spin_unlock(&cdev->lock);
 			if (value >= 0)
 				value = min(w_length, (u16) value);
 			break;
@@ -1905,11 +1910,7 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		f = cdev->config->interface[intf];
 		if (!f)
 			break;
-
-		if (USB_CONFIG_ATT_WAKEUP & cdev->config->bmAttributes)
-			status = f->get_status ? f->get_status(f) : 0;
-		else
-			status = 0;
+		status = f->get_status ? f->get_status(f) : 0;
 		if (status < 0)
 			break;
 		put_unaligned_le16(status & 0x0000ffff, req->buf);
@@ -2113,12 +2114,6 @@ void composite_disconnect(struct usb_gadget *gadget)
 	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
 	unsigned long			flags;
 
-	if (cdev == NULL) {
-		WARN(1, "%s: Calling disconnect on a Gadget that is \
-			 not connected\n", __func__);
-		return;
-	}
-
 	/* REVISIT:  should we have config and device level
 	 * disconnect callbacks?
 	 */
@@ -2229,7 +2224,7 @@ int composite_dev_prepare(struct usb_composite_driver *composite,
 	if (!cdev->req)
 		return -ENOMEM;
 
-	cdev->req->buf = kmalloc(USB_COMP_EP0_BUFSIZ, GFP_KERNEL);
+	cdev->req->buf = kzalloc(USB_COMP_EP0_BUFSIZ, GFP_KERNEL);
 	if (!cdev->req->buf)
 		goto fail;
 
@@ -2419,10 +2414,7 @@ void composite_resume(struct usb_gadget *gadget)
 	/* REVISIT:  should we have config level
 	 * suspend/resume callbacks?
 	 */
-	INFO(cdev, "USB Resume end\n");
-#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-	place_marker("M - USB Device is resumed");
-#endif
+	DBG(cdev, "resume\n");
 	if (cdev->driver->resume)
 		cdev->driver->resume(cdev);
 	if (cdev->config) {

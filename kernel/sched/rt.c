@@ -11,7 +11,7 @@
 
 #include <trace/events/sched.h>
 
-#include "walt/walt.h"
+#include "walt.h"
 
 #include <trace/hooks/sched.h>
 
@@ -1450,8 +1450,12 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
 
-	if (flags & ENQUEUE_WAKEUP)
+	if (flags & ENQUEUE_WAKEUP) {
 		rt_se->timeout = 0;
+		#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+		trace_sched_blocked_reason(p);
+		#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
+	}
 
 	enqueue_rt_entity(rt_se, flags);
 	walt_inc_cumulative_runnable_avg(rq, p);
@@ -1652,55 +1656,6 @@ static void check_preempt_equal_prio(struct rq *rq, struct task_struct *p)
 	resched_curr(rq);
 }
 
-#ifdef CONFIG_SCHED_WALT
-#define WALT_RT_PULL_THRESHOLD_NS	250000
-static struct task_struct *pick_highest_pushable_task(struct rq *rq, int cpu);
-static void try_pull_rt_task(struct rq *this_rq)
-{
-	int i, this_cpu = this_rq->cpu, src_cpu = this_cpu;
-	struct rq *src_rq;
-	struct task_struct *p;
-
-	if (sched_rt_runnable(this_rq))
-		return;
-
-	for_each_possible_cpu(i) {
-		struct rq *rq = cpu_rq(i);
-
-		if (!has_pushable_tasks(rq))
-			continue;
-
-		src_cpu = i;
-		break;
-	}
-
-	if (src_cpu == this_cpu)
-		return;
-
-	src_rq = cpu_rq(src_cpu);
-	double_lock_balance(this_rq, src_rq);
-
-	/* lock is dropped, so check again */
-	if (sched_rt_runnable(this_rq))
-		goto unlock;
-
-	p = pick_highest_pushable_task(src_rq, this_cpu);
-
-	if (!p)
-		goto unlock;
-
-	if (sched_ktime_clock() - p->wts.last_wake_ts <
-				WALT_RT_PULL_THRESHOLD_NS)
-		goto unlock;
-
-	deactivate_task(src_rq, p, 0);
-	set_task_cpu(p, this_cpu);
-	activate_task(this_rq, p, 0);
-unlock:
-	double_unlock_balance(this_rq, src_rq);
-}
-#endif
-
 static int balance_rt(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
 {
 	if (!on_rt_rq(&p->rt) && need_pull_rt_task(rq, p)) {
@@ -1711,14 +1666,7 @@ static int balance_rt(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
 		 * not yet started the picking loop.
 		 */
 		rq_unpin_lock(rq, rf);
-#ifndef CONFIG_SCHED_WALT
 		pull_rt_task(rq);
-#else
-		if (rt_overloaded(rq))
-			pull_rt_task(rq);
-		else
-			try_pull_rt_task(rq);
-#endif
 		rq_repin_lock(rq, rf);
 	}
 

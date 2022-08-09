@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -578,10 +578,12 @@ int redriver_notify_disconnect(struct device_node *node)
 	    (redriver->op_mode == OP_MODE_NONE))
 		return 0;
 
-	dev_dbg(redriver->dev, "disconnect op mode %s\n",
-		OPMODESTR(redriver->op_mode));
+	dev_dbg(redriver->dev, "op mode %s -> %s\n",
+		OPMODESTR(redriver->op_mode), OPMODESTR(OP_MODE_NONE));
 
-	redriver_i2c_reg_set(redriver, GEN_DEV_SET_REG, 0);
+	redriver->op_mode = OP_MODE_NONE;
+
+	ssusb_redriver_gen_dev_set(redriver);
 
 	return 0;
 }
@@ -1020,8 +1022,8 @@ static int __maybe_unused redriver_i2c_suspend(struct device *dev)
 	    redriver->op_mode == OP_MODE_DEFAULT)
 		return 0;
 
-	redriver_i2c_reg_set(redriver, GEN_DEV_SET_REG,
-				redriver->gen_dev_val & ~CHIP_EN);
+	redriver->op_mode = OP_MODE_NONE;
+	ssusb_redriver_gen_dev_set(redriver);
 
 	return 0;
 }
@@ -1033,15 +1035,6 @@ static int __maybe_unused redriver_i2c_resume(struct device *dev)
 
 	dev_dbg(redriver->dev, "%s: SS USB redriver resume.\n",
 			__func__);
-
-	/* no suspend happen in following mode */
-	if (redriver->op_mode == OP_MODE_DP ||
-	    redriver->op_mode == OP_MODE_NONE ||
-	    redriver->op_mode == OP_MODE_DEFAULT)
-		return 0;
-
-	redriver_i2c_reg_set(redriver, GEN_DEV_SET_REG,
-				redriver->gen_dev_val);
 
 	return 0;
 }

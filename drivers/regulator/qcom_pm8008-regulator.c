@@ -440,7 +440,7 @@ static int pm8008_regulator_set_voltage(struct regulator_dev *rdev,
 {
 	struct pm8008_regulator *pm8008_reg = rdev_get_drvdata(rdev);
 	int rc;
-
+        
 	if (pm8008_reg->chip->suspended) {
 		if (min_uv <= pm8008_reg->uv && pm8008_reg->uv <= max_uv)
 			return 0;

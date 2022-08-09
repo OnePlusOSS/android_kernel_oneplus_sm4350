@@ -180,8 +180,7 @@ int usb_choose_configuration(struct usb_device *udev)
 			"due to insufficient available bus power\n",
 			insufficient_power, plural(insufficient_power));
 
-	/* choose 'best' config only if some other config is not set already */
-	if (best && !udev->actconfig) {
+	if (best) {
 		i = best->desc.bConfigurationValue;
 		dev_dbg(&udev->dev,
 			"configuration #%d chosen from %d choice%s\n",

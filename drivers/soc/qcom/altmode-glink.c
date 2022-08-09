@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020 The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"altmode-glink: %s: " fmt, __func__
@@ -8,7 +8,6 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/idr.h>
-#include <linux/ipc_logging.h>
 #include <linux/ktime.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
@@ -28,17 +27,9 @@
 
 #define MAX_NUM_PORTS		4
 
-#define NUM_LOG_PAGES		10
-
 #define IDR_KEY_GEN(svid, ind)	(((svid) << 8) | (ind))
 #define IDR_KEY(client)		\
 	IDR_KEY_GEN((client)->data.svid, (client)->port_index)
-
-#define altmode_dbg(fmt, ...) \
-	do { \
-		ipc_log_string(altmode_ipc_log, fmt, ##__VA_ARGS__); \
-		pr_debug(fmt, ##__VA_ARGS__); \
-	} while (0)
 
 struct usbc_notify_ind_msg {
 	struct pmic_glink_hdr	hdr;
@@ -134,7 +125,6 @@ static LIST_HEAD(probe_notify_list);
 static DEFINE_MUTEX(notify_lock);
 
 static void altmode_send_pan_ack(struct work_struct *work);
-static void *altmode_ipc_log;
 
 static struct altmode_dev *to_altmode_device(struct device_node *amdev_node)
 {
@@ -472,7 +462,7 @@ static void altmode_send_pan_en(struct work_struct *work)
 	}
 
 	atomic_set(&amdev->pan_en_sent, 1);
-	altmode_dbg("Sent PAN EN\n");
+	pr_debug("Sent PAN EN\n");
 }
 
 static int altmode_send_ack(struct altmode_dev *amdev, u8 port_index)
@@ -489,7 +479,7 @@ static int altmode_send_ack(struct altmode_dev *amdev, u8 port_index)
 		return rc;
 	}
 
-	altmode_dbg("port %u: Sent PAN ACK\n", port_index);
+	pr_debug("port %u: Sent PAN ACK\n", port_index);
 
 	return rc;
 }
@@ -498,7 +488,7 @@ static void altmode_state_cb(void *priv, enum pmic_glink_state state)
 {
 	struct altmode_dev *amdev = priv;
 
-	altmode_dbg("state: %d\n", state);
+	pr_debug("state: %d\n", state);
 
 	switch (state) {
 	case PMIC_GLINK_STATE_DOWN:
@@ -537,7 +527,7 @@ static int altmode_callback(void *priv, void *data, size_t len)
 	struct altmode_client *amclient;
 	u8 port_index;
 
-	altmode_dbg("len: %zu owner: %u type: %u opcode %04x\n", len, hdr->owner,
+	pr_debug("len: %zu owner: %u type: %u opcode %04x\n", len, hdr->owner,
 			hdr->type, hdr->opcode);
 
 	/*
@@ -554,7 +544,7 @@ static int altmode_callback(void *priv, void *data, size_t len)
 		break;
 	case USBC_NOTIFY_IND:
 		if (len != sizeof(*notify_msg)) {
-			altmode_dbg("Expected length %u, got: %zu\n",
+			pr_debug("Expected length %u, got: %zu\n",
 					sizeof(*notify_msg), len);
 			return -EINVAL;
 		}
@@ -568,7 +558,7 @@ static int altmode_callback(void *priv, void *data, size_t len)
 		mutex_unlock(&amdev->client_lock);
 
 		if (!amclient) {
-			altmode_dbg("No client associated with SVID %#x port %u\n",
+			pr_debug("No client associated with SVID %#x port %u\n",
 					svid, port_index);
 			amdev->ack_port_index = port_index;
 			schedule_delayed_work(&amdev->send_pan_ack_work,
@@ -576,7 +566,7 @@ static int altmode_callback(void *priv, void *data, size_t len)
 			return 0;
 		}
 
-		altmode_dbg("Payload: %*ph\n", NOTIFY_PAYLOAD_SIZE,
+		pr_debug("Payload: %*ph\n", NOTIFY_PAYLOAD_SIZE,
 				notify_msg->payload);
 
 		cancel_work_sync(&amclient->client_cb_work);
@@ -737,10 +727,6 @@ static int altmode_probe(struct platform_device *pdev)
 		goto unreg_pmic_glink;
 	}
 
-	altmode_ipc_log = ipc_log_context_create(NUM_LOG_PAGES, "altmode", 0);
-	if (!altmode_ipc_log)
-		dev_warn(dev, "Error in creating ipc_log_context\n");
-
 	altmode_notify_clients(amdev);
 
 	return 0;
@@ -778,9 +764,6 @@ static int altmode_remove(struct platform_device *pdev)
 	list_for_each_entry_safe(client, tmp, &amdev->client_list, c_node)
 		list_del(&client->c_node);
 	mutex_unlock(&amdev->client_lock);
-
-	ipc_log_context_destroy(altmode_ipc_log);
-	altmode_ipc_log = NULL;
 
 	rc = pmic_glink_unregister_client(amdev->pgclient);
 	if (rc < 0)

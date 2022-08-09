@@ -1541,13 +1541,22 @@ int generic_access_phys(struct vm_area_struct *vma, unsigned long addr,
 #ifdef CONFIG_SPECULATIVE_PAGE_FAULT
 static inline void vm_write_begin(struct vm_area_struct *vma)
 {
-	/*
-	 * The reads never spins and preemption
-	 * disablement is not required.
-	 */
-	raw_write_seqcount_begin(&vma->vm_sequence);
+	write_seqcount_begin(&vma->vm_sequence);
+}
+static inline void vm_write_begin_nested(struct vm_area_struct *vma,
+					 int subclass)
+{
+	write_seqcount_begin_nested(&vma->vm_sequence, subclass);
 }
 static inline void vm_write_end(struct vm_area_struct *vma)
+{
+	write_seqcount_end(&vma->vm_sequence);
+}
+static inline void vm_raw_write_begin(struct vm_area_struct *vma)
+{
+	raw_write_seqcount_begin(&vma->vm_sequence);
+}
+static inline void vm_raw_write_end(struct vm_area_struct *vma)
 {
 	raw_write_seqcount_end(&vma->vm_sequence);
 }
@@ -1555,7 +1564,17 @@ static inline void vm_write_end(struct vm_area_struct *vma)
 static inline void vm_write_begin(struct vm_area_struct *vma)
 {
 }
+static inline void vm_write_begin_nested(struct vm_area_struct *vma,
+					 int subclass)
+{
+}
 static inline void vm_write_end(struct vm_area_struct *vma)
+{
+}
+static inline void vm_raw_write_begin(struct vm_area_struct *vma)
+{
+}
+static inline void vm_raw_write_end(struct vm_area_struct *vma)
 {
 }
 #endif /* CONFIG_SPECULATIVE_PAGE_FAULT */
@@ -2577,7 +2596,8 @@ int __must_check write_one_page(struct page *page);
 void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
-#define VM_READAHEAD_PAGES	(SZ_512K / PAGE_SIZE)
+//#define VM_READAHEAD_PAGES	(SZ_512K / PAGE_SIZE)
+#define VM_READAHEAD_PAGES	(totalram_pages() > 0x100000 ? (SZ_512K / PAGE_SIZE) : (SZ_128K / PAGE_SIZE))
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
 			pgoff_t offset, unsigned long nr_to_read);

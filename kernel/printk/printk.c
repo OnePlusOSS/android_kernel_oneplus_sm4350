@@ -55,6 +55,23 @@
 #include <trace/events/initcall.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/printk.h>
+
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+//ftm feature
+static bool inner_ftm_log_stop = false;
+static int __init factroy_mode_serial_ctrl(char *str)
+{
+	inner_ftm_log_stop = true;
+	return 1;
+}
+__setup("ftm_seri_latestop", factroy_mode_serial_ctrl);
+
+static bool ftm_log_enable(void)
+{
+	return !inner_ftm_log_stop;
+}
+#endif
+
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/debug.h>
 
@@ -665,6 +682,21 @@ static int log_store(u32 caller_id, int facility, int level,
 	u32 size, pad_len;
 	u16 trunc_msg_len = 0;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DETAILHEAD)
+    //part 1/2: yixue.ge 2015-04-22 add for add cpu number and current id and current comm to kmsg
+    int this_cpu = smp_processor_id();
+    char tbuf[64];
+    unsigned tlen;
+
+    if (console_suspended == 0) {
+        tlen = snprintf(tbuf, sizeof(tbuf), " (%x)[%d:%s]",
+            this_cpu, current->pid, current->comm);
+    } else {
+        tlen = snprintf(tbuf, sizeof(tbuf), " %x)", this_cpu);
+    }
+    text_len += tlen;
+#endif //add end part 1/3
+
 	/* number of '\0' padding bytes to next message */
 	size = msg_used_size(text_len, dict_len, &pad_len);
 
@@ -689,7 +721,13 @@ static int log_store(u32 caller_id, int facility, int level,
 
 	/* fill message */
 	msg = (struct printk_log *)(log_buf + log_next_idx);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DETAILHEAD)
+//part 2/2: yixue.ge 2015-04-22 add for add cpu number and current id and current comm to kmsg
+    memcpy(log_text(msg), tbuf, tlen);
+    memcpy(log_text(msg) + tlen, text, text_len-tlen);
+#else
 	memcpy(log_text(msg), text, text_len);
+#endif //add end part 3/3
 	msg->text_len = text_len;
 	if (trunc_msg_len) {
 		memcpy(log_text(msg) + text_len, trunc_msg, trunc_msg_len);
@@ -1850,6 +1888,10 @@ static void call_console_drivers(const char *ext_text, size_t ext_len,
 		return;
 
 	for_each_console(con) {
+		#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+		if ((con->flags & CON_CONSDEV) && (!ftm_log_enable()))
+			continue;
+		#endif
 		if (exclusive_console && con != exclusive_console)
 			continue;
 		if (!(con->flags & CON_ENABLED))
@@ -3405,6 +3447,56 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(kmsg_dump_get_buffer);
+
+#ifdef CONFIG_OPLUS_FEATURE_UBOOT_LOG
+#include <soc/oplus/system/uboot_utils.h>
+bool back_kmsg_dump_get_buffer(struct kmsg_dumper *dumper, bool syslog,
+			  char *buf, size_t size, size_t *len)
+{
+	unsigned long flags;
+	u64 seq;
+	u32 idx;
+	size_t l = 0;
+	bool ret = false;
+	bool time = printk_time;
+
+	logbuf_lock_irqsave(flags);
+	if (dumper->cur_seq < log_first_seq) {
+		l += scnprintf(buf + l,	size - l, "Lost some logs: cur_seq:%lld, log_first_seq:%lld\n", dumper->cur_seq, log_first_seq);
+		//messages are gone, move to first available one
+		dumper->cur_seq = log_first_seq;
+		dumper->cur_idx = log_first_idx;
+	}
+
+	// last entry
+	if (dumper->cur_seq >= dumper->next_seq) {
+		logbuf_unlock_irqrestore(flags);
+		goto out;
+	}
+
+
+	// record log form cur_seq until the buf is full
+	seq = dumper->cur_seq;
+	idx = dumper->cur_idx;
+	while (l + LOG_LINE_MAX + PREFIX_MAX < size && seq < dumper->next_seq) {
+		struct printk_log *msg = log_from_idx(idx);
+
+		l += msg_print_text(msg, syslog, time, buf + l, size - l);
+		idx = log_next(idx);
+		seq++;
+	}
+	dumper->cur_seq = seq;
+	dumper->cur_idx = idx;
+
+	ret = true;
+	logbuf_unlock_irqrestore(flags);
+out:
+	if (len)
+		*len = l;
+	return ret;
+}
+EXPORT_SYMBOL(back_kmsg_dump_get_buffer);
+#endif
 
 /**
  * kmsg_dump_rewind_nolock - reset the interator (unlocked version)

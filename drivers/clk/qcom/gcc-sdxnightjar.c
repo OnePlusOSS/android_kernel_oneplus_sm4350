@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -20,7 +20,7 @@
 #include "clk-regmap.h"
 #include "common.h"
 #include "reset.h"
-#include "vdd-level-sdxnightjar.h"
+#include "vdd-level.h"
 
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_cx_ao, VDD_NUM, 1, vdd_corner);
@@ -1444,32 +1444,6 @@ static struct clk_branch gcc_xo_div4_clk = {
 	},
 };
 
-static struct clk_branch gcc_mss_q6_bimc_axi_clk = {
-	.halt_reg = 0x49004,
-	.halt_check = BRANCH_HALT_DELAY,
-	.clkr = {
-		.enable_reg = 0x49004,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "gcc_mss_q6_bimc_axi_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_mss_cfg_ahb_clk = {
-	.halt_reg = 0x49000,
-	.halt_check = BRANCH_HALT_DELAY,
-	.clkr = {
-		.enable_reg = 0x49000,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "gcc_mss_cfg_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_regmap *gcc_sdxnightjar_clocks[] = {
 	[BLSP1_QUP1_I2C_APPS_CLK_SRC] = &blsp1_qup1_i2c_apps_clk_src.clkr,
 	[BLSP1_QUP1_SPI_APPS_CLK_SRC] = &blsp1_qup1_spi_apps_clk_src.clkr,
@@ -1529,8 +1503,6 @@ static struct clk_regmap *gcc_sdxnightjar_clocks[] = {
 	[GCC_USB_PHY_CFG_AHB_CLK] = &gcc_usb_phy_cfg_ahb_clk.clkr,
 	[GCC_USB_SS_REF_CLK] = &gcc_usb_ss_ref_clk.clkr,
 	[GCC_XO_DIV4_CLK] = &gcc_xo_div4_clk.clkr,
-	[GCC_MSS_Q6_BIMC_AXI_CLK] = &gcc_mss_q6_bimc_axi_clk.clkr,
-	[GCC_MSS_CFG_AHB_CLK] = &gcc_mss_cfg_ahb_clk.clkr,
 	[GP1_CLK_SRC] = &gp1_clk_src.clkr,
 	[GP2_CLK_SRC] = &gp2_clk_src.clkr,
 	[GP3_CLK_SRC] = &gp3_clk_src.clkr,
@@ -1599,17 +1571,11 @@ static int gcc_sdxnightjar_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static void gcc_sdxnightjar_sync_state(struct device *dev)
-{
-	qcom_cc_sync_state(dev, &gcc_sdxnightjar_desc);
-}
-
 static struct platform_driver gcc_sdxnightjar_driver = {
 	.probe = gcc_sdxnightjar_probe,
 	.driver = {
 		.name = "gcc-sdxnightjar",
 		.of_match_table = gcc_sdxnightjar_match_table,
-		.sync_state = gcc_sdxnightjar_sync_state,
 	},
 };
 

@@ -196,3 +196,9 @@ config SCSI_UFS_CRYPTO_QTI
 	 Enable Vendor Crypto Engine Support in UFS
 	 Enabling this allows kernel to use UFS crypto operations defined
 	 and implemented by QTI.
+
+config OPLUS_UFS_DRIVER
+	tristate "oplus ufs driver"
+	default n
+	help
+	  oplus ufs driver.

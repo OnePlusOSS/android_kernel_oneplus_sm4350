@@ -74,6 +74,12 @@
 #include <linux/uaccess.h>
 #include <asm/processor.h>
 
+#ifdef OPLUS_FEATURE_TASK_CPUSTATS
+#ifdef CONFIG_OPLUS_CTP
+#include <linux/task_cpustats.h>
+#endif
+#endif /* OPLUS_FEATURE_TASK_CPUSTATS */
+
 #ifdef CONFIG_X86
 #include <asm/nmi.h>
 #include <asm/stacktrace.h>
@@ -103,6 +109,13 @@
 
 #if defined(CONFIG_SYSCTL)
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_slide.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+#if defined(CONFIG_OPLUS_FEATURE_HUNG_TASK_ENHANCE) && defined(CONFIG_OPLUS_FEATURE_DEATH_HEALER)
+#include <soc/oplus/system/hung_task_enhance.h>
+#endif
 /* External variables not in a header file. */
 extern int suid_dumpable;
 #ifdef CONFIG_COREDUMP
@@ -125,8 +138,13 @@ extern int sysctl_nr_trim_pages;
 static int sixty = 60;
 #endif
 
-static int __maybe_unused neg_one = -1;
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+int sysctl_sched_assist_enabled = 1;
+int sysctl_sched_assist_scene = 0;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
+static int __maybe_unused neg_one = -1;
+static int __maybe_unused one = 1;
 static int __maybe_unused two = 2;
 static int __maybe_unused four = 4;
 static unsigned long zero_ul;
@@ -149,7 +167,6 @@ static int __maybe_unused max_kswapd_threads = MAX_KSWAPD_THREADS;
 #ifdef CONFIG_SCHED_WALT
 static int neg_three = -3;
 static int three = 3;
-static int fifty = 50;
 static int two_hundred_fifty_five = 255;
 const int sched_user_hint_max = 1000;
 static unsigned int ns_per_sec = NSEC_PER_SEC;
@@ -165,7 +182,6 @@ static unsigned int two_hundred_million = 200000000;
 static unsigned int min_cfs_boost_prio = 99;
 static unsigned int max_cfs_boost_prio = 119;
 #endif
-
 /* this is needed for the proc_doulongvec_minmax of vm_dirty_bytes */
 static unsigned long dirty_bytes_min = 2 * PAGE_SIZE;
 
@@ -462,15 +478,6 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &one_hundred,
 	},
 	{
-		.procname	= "sched_asym_cap_sibling_freq_match_enable",
-		.data		= &sysctl_sched_asym_cap_sibling_freq_match_en,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE,
-	},
-	{
 		.procname	= "sched_coloc_downmigrate_ns",
 		.data		= &sysctl_sched_coloc_downmigrate_ns,
 		.maxlen		= sizeof(unsigned int),
@@ -597,23 +604,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &one_thousand,
 	},
-	{
-		.procname	= "sched_sync_hint_enable",
-		.data		= &sysctl_sched_sync_hint_enable,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
-	{
-		.procname	= "sched_cpu_high_irqload",
-		.data		= &sysctl_walt_cpu_high_irqload,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= walt_high_irqload_handler,
-		.extra1		= &fifty,
-		.extra2		= &one_hundred,
-	},
-
 #endif
 	{
 		.procname	= "sched_force_lb_enable",
@@ -1475,7 +1465,25 @@ static struct ctl_table kern_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},
-
+#if defined(CONFIG_OPLUS_FEATURE_HUNG_TASK_ENHANCE) && defined(CONFIG_OPLUS_FEATURE_DEATH_HEALER)
+/* record the hung task killing */
+	{
+		.procname	= "hung_task_kill",
+		.data		= &sysctl_hung_task_oplus_kill,
+		.maxlen		= 128,
+		.mode		= 0666,
+		.proc_handler	= proc_dostring,
+	},
+/* Foreground background optimization,change max io count */
+	{
+		.procname	= "hung_task_maxiowait_count",
+		.data		= &sysctl_hung_task_maxiowait_count,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &five,
+	},
+#endif
 #endif
 #ifdef CONFIG_RT_MUTEXES
 	{
@@ -1618,6 +1626,63 @@ static struct ctl_table kern_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 #endif
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	{
+		.procname	= "sched_assist_enabled",
+		.data		= &sysctl_sched_assist_enabled,
+		.maxlen		= sizeof(int),
+		.mode		= 0666,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "sched_assist_scene",
+		.data		= &sysctl_sched_assist_scene,
+		.maxlen		= sizeof(int),
+		.mode		= 0666,
+		.proc_handler   = sysctl_sched_assist_scene_handler,
+	},
+	{
+		.procname	= "slide_boost_enabled",
+		.data		= &sysctl_slide_boost_enabled,
+		.maxlen 	= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+	{
+		.procname	= "boost_task_threshold",
+		.data		= &sysctl_boost_task_threshold,
+		.maxlen 	= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+	{
+		.procname	= "frame_rate",
+		.data		= &sysctl_frame_rate,
+		.maxlen 	= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+	{
+		.procname	= "input_boost_enabled",
+		.data		= &sysctl_input_boost_enabled,
+		.maxlen 	= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = sysctl_sched_assist_input_boost_ctrl_handler,
+	},
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+#ifdef OPLUS_FEATURE_TASK_CPUSTATS
+#ifdef CONFIG_OPLUS_CTP
+	{
+		.procname	= "task_cpustats_enable",
+		.data		= &sysctl_task_cpustats_enable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0666,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2		= &one,
+	},
+#endif
+#endif /* OPLUS_FEATURE_TASK_CPUSTATS */
 	{ }
 };
 

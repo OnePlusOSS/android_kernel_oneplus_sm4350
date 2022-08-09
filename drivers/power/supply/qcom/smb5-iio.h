@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020 The Linux Foundation. All rights reserved.
  */
 
 #ifndef __SMB5_IIO_H
@@ -151,7 +151,6 @@ static const struct smb5_iio_prop_channels smb5_chans_pmic[] = {
 	SMB5_CHAN_INDEX("usb_smb_en_reason", SMB_EN_REASON)
 	SMB5_CHAN_INDEX("usb_adapter_cc_mode", ADAPTER_CC_MODE)
 	SMB5_CHAN_INDEX("usb_moisture_detected", MOISTURE_DETECTED)
-	SMB5_CHAN_INDEX("usb_moisture_detection_en", MOISTURE_DETECTION_EN)
 	SMB5_CHAN_INDEX("usb_hvdcp_opti_allowed", HVDCP_OPTI_ALLOWED)
 	SMB5_CHAN_ACTIVITY("usb_qc_opti_disable", QC_OPTI_DISABLE)
 	SMB5_CHAN_VOLT("usb_voltage_vph", VOLTAGE_VPH)
@@ -201,6 +200,9 @@ static const struct smb5_iio_prop_channels smb5_chans_pmic[] = {
 	SMB5_CHAN_ACTIVITY("battery_force_recharge", FORCE_RECHARGE)
 	SMB5_CHAN_ACTIVITY("battery_fcc_stepper_enable", FCC_STEPPER_ENABLE)
 	SMB5_CHAN_INDEX("usb_typec_accessory_mode", TYPEC_ACCESSORY_MODE)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	SMB5_CHAN_INDEX("usb_pd_sdp", PD_SDP)
+#endif
 };
 
 struct iio_channel **get_ext_channels(struct device *dev,

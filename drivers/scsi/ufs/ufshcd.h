@@ -595,6 +595,19 @@ struct ufshcd_clk_ctx {
 	ktime_t ts;
 	enum ufshcd_ctx ctx;
 };
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+enum ufshcd_scsi_host_busy_ctxt {
+       SCALING_BUSY,
+       UFS_RESET_OR_EH_SCHEDULED,
+       LRB_IN_USE,
+       UFSHCD_HOLD,
+};
+
+struct ufshcd_blk_ctx {
+       ktime_t ts;
+       enum ufshcd_scsi_host_busy_ctxt busy_ctx;
+};
+#endif /*CONFIG_OPLUS_UFS_DRIVER*/
 
 #endif
 
@@ -657,6 +670,9 @@ struct ufs_stats {
 	u32 power_mode_change_cnt;
 	struct ufshcd_clk_ctx clk_hold;
 	struct ufshcd_clk_ctx clk_rel;
+#ifdef CONFIG_OPLUS_UFS_DRIVER
+	struct ufshcd_blk_ctx scsi_blk_reqs;
+#endif /*CONFIG_OPLUS_UFS_DRIVER*/
 #endif
 	/* uic specific errors */
 	struct ufs_err_reg_hist pa_err;

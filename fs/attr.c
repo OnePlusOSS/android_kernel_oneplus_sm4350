@@ -44,6 +44,10 @@ static bool chgrp_ok(const struct inode *inode, kgid_t gid)
 	return false;
 }
 
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+#define BACKUPSERVICE_FSUID 1023
+#endif
+
 /**
  * setattr_prepare - check if attribute changes to a dentry are allowed
  * @dentry:	dentry to check
@@ -88,7 +92,14 @@ int setattr_prepare(struct dentry *dentry, struct iattr *attr)
 	/* Make sure a caller can chmod. */
 	if (ia_valid & ATTR_MODE) {
 		if (!inode_owner_or_capable(inode))
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+		{
+			if(!((inode->i_uid.val == BACKUPSERVICE_FSUID) && strstr(current->comm, "Thread-")))
+				return -EPERM;
+		}
+#else
 			return -EPERM;
+#endif
 		/* Also check the setgid bit! */
 		if (!in_group_p((ia_valid & ATTR_GID) ? attr->ia_gid :
 				inode->i_gid) &&
@@ -99,7 +110,14 @@ int setattr_prepare(struct dentry *dentry, struct iattr *attr)
 	/* Check for setting the inode time. */
 	if (ia_valid & (ATTR_MTIME_SET | ATTR_ATIME_SET | ATTR_TIMES_SET)) {
 		if (!inode_owner_or_capable(inode))
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+		{
+			if(!((inode->i_uid.val == BACKUPSERVICE_FSUID) && strstr(current->comm, "Thread-")))
+				return -EPERM;
+		}
+#else
 			return -EPERM;
+#endif
 	}
 
 kill_priv:

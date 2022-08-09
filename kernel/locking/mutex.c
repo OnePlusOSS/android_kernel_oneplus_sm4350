@@ -47,6 +47,9 @@ __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 #ifdef CONFIG_MUTEX_SPIN_ON_OWNER
 	osq_lock_init(&lock->osq);
 #endif
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	lock->ux_dep_task = NULL;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 	debug_mutex_init(lock, name, key);
 }
@@ -212,7 +215,15 @@ __mutex_add_waiter(struct mutex *lock, struct mutex_waiter *waiter,
 {
 	debug_mutex_add_waiter(lock, waiter, current);
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (sysctl_sched_assist_enabled) {
+		mutex_list_add(current, &waiter->list, list, lock);
+	} else {
+		list_add_tail(&waiter->list, list);
+	}
+#else /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	list_add_tail(&waiter->list, list);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	if (__mutex_waiter_is_first(lock, waiter))
 		__mutex_set_flag(lock, MUTEX_FLAG_WAITERS);
 }
@@ -1045,6 +1056,11 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 			if (ret)
 				goto err;
 		}
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+		if (sysctl_sched_assist_enabled) {
+			mutex_set_inherit_ux(lock, current);
+		}
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 		spin_unlock(&lock->wait_lock);
 		schedule_preempt_disabled();
@@ -1271,6 +1287,11 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 
 	spin_lock(&lock->wait_lock);
 	debug_mutex_unlock(lock);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (sysctl_sched_assist_enabled) {
+		mutex_unset_inherit_ux(lock, current);
+	}
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	if (!list_empty(&lock->wait_list)) {
 		/* get the first entry from the wait-list: */
 		struct mutex_waiter *waiter =

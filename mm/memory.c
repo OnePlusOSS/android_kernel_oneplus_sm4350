@@ -665,6 +665,7 @@ check_pfn:
 out:
 	return pfn_to_page(pfn);
 }
+EXPORT_SYMBOL(_vm_normal_page);
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 struct page *vm_normal_page_pmd(struct vm_area_struct *vma, unsigned long addr,
@@ -4394,11 +4395,7 @@ int __handle_speculative_fault(struct mm_struct *mm, unsigned long address,
 	 * because vm_next and vm_prev must be safe. This can't be guaranteed
 	 * in the speculative path.
 	 */
-	if (unlikely((vma_is_anonymous(vmf.vma) && !vmf.vma->anon_vma) ||
-		(!vma_is_anonymous(vmf.vma) &&
-			!(vmf.vma->vm_flags & VM_SHARED) &&
-			(flags & FAULT_FLAG_WRITE) &&
-			!vmf.vma->anon_vma)))
+	if (unlikely(vma_is_anonymous(vmf.vma) && !vmf.vma->anon_vma))
 		return VM_FAULT_RETRY;
 
 	vmf.vma_flags = READ_ONCE(vmf.vma->vm_flags);

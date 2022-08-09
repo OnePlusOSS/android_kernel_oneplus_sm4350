@@ -58,8 +58,9 @@ static int exfat_allocate_bitmap(struct super_block *sb,
 	need_map_size = ((EXFAT_DATA_CLUSTER_COUNT(sbi) - 1) / BITS_PER_BYTE)
 		+ 1;
 	if (need_map_size != map_size) {
-		exfat_err(sb, "bogus allocation bitmap size(need : %u, cur : %lld)",
-			  need_map_size, map_size);
+		exfat_msg(sb, KERN_ERR,
+				"bogus allocation bitmap size(need : %u, cur : %lld)",
+				need_map_size, map_size);
 		/*
 		 * Only allowed when bogus allocation
 		 * bitmap size is large
@@ -90,6 +91,7 @@ static int exfat_allocate_bitmap(struct super_block *sb,
 		}
 	}
 
+	sbi->pbr_bh = NULL;
 	return 0;
 }
 
@@ -135,6 +137,8 @@ void exfat_free_bitmap(struct exfat_sb_info *sbi)
 {
 	int i;
 
+	brelse(sbi->pbr_bh);
+
 	for (i = 0; i < sbi->map_sectors; i++)
 		__brelse(sbi->vol_amap[i]);
 
@@ -158,7 +162,7 @@ int exfat_set_bitmap(struct inode *inode, unsigned int clu)
 	b = BITMAP_OFFSET_BIT_IN_SECTOR(sb, ent_idx);
 
 	set_bit_le(b, sbi->vol_amap[i]->b_data);
-	exfat_update_bh(sbi->vol_amap[i], IS_DIRSYNC(inode));
+	exfat_update_bh(sb, sbi->vol_amap[i], IS_DIRSYNC(inode));
 	return 0;
 }
 
@@ -180,7 +184,7 @@ void exfat_clear_bitmap(struct inode *inode, unsigned int clu)
 	b = BITMAP_OFFSET_BIT_IN_SECTOR(sb, ent_idx);
 
 	clear_bit_le(b, sbi->vol_amap[i]->b_data);
-	exfat_update_bh(sbi->vol_amap[i], IS_DIRSYNC(inode));
+	exfat_update_bh(sb, sbi->vol_amap[i], IS_DIRSYNC(inode));
 
 	if (opts->discard) {
 		int ret_discard;
@@ -191,7 +195,8 @@ void exfat_clear_bitmap(struct inode *inode, unsigned int clu)
 			(1 << sbi->sect_per_clus_bits), GFP_NOFS, 0);
 
 		if (ret_discard == -EOPNOTSUPP) {
-			exfat_err(sb, "discard not supported by device, disabling");
+			exfat_msg(sb, KERN_ERR,
+				"discard not supported by device, disabling");
 			opts->discard = 0;
 		}
 	}

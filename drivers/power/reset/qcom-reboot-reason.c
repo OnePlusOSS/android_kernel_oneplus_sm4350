@@ -32,6 +32,21 @@ static struct poweroff_reason reasons[] = {
 	{ "dm-verity device corrupted",	0x04 },
 	{ "dm-verity enforcing",	0x05 },
 	{ "keys clear",			0x06 },
+	#ifdef OPLUS_FEATUREB_BOOT
+	{ "silence",			0x21 },//PON_RESTART_REASON_SILENCE= 0x21,
+ 	{ "sau",			0x22 },//PON_RESTART_REASON_SAU= 0x22,
+        { "rf",	        		0x23 },//PON_RESTART_REASON_RF= 0x23,
+        { "wlan",			0x24 },//PON_RESTART_REASON_WLAN= 0x24,
+#ifdef USE_MOS_MODE
+        { "mos",			0x25 },//PON_RESTART_REASON_MOS= 0x25,
+#endif
+        { "ftm",			0x26 },//PON_RESTART_REASON_FACTORY= 0x26,
+        { "kernel",			0x27 },//PON_RESTART_REASON_KERNEL= 0x27,
+        { "modem",			0x28 },//PON_RESTART_REASON_MODEM= 0x28,
+        { "android",			0x29 },//PON_RESTART_REASON_ANDROID= 0x29,
+        { "safe",			0x2A },//PON_RESTART_REASON_SAFE= 0x2A,
+       // { "other",			0x3E },//PON_RESTART_REASON_NORMAL= 0x3E,
+#endif /*OPLUS_FEATUREB_BOOT*/
 	{}
 };
 

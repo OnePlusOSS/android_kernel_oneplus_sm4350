@@ -432,6 +432,10 @@ struct binder_proc {
 	struct hlist_node deferred_work_node;
 	int deferred_work;
 	bool is_dead;
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	int proc_type;
+	bool is_system_server;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 	struct list_head todo;
 	struct binder_stats stats;

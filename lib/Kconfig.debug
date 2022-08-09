@@ -579,7 +579,7 @@ config HAVE_DEBUG_KMEMLEAK
 config DEBUG_KMEMLEAK
 	bool "Kernel memory leak detector"
 	depends on DEBUG_KERNEL && HAVE_DEBUG_KMEMLEAK
-	select DEBUG_FS
+	#select DEBUG_FS #debug_fs change to proc_fs workaround vintf
 	select STACKTRACE if STACKTRACE_SUPPORT
 	select KALLSYMS
 	select CRC32

@@ -1071,7 +1071,17 @@ static ssize_t fts_log_level_store(
 static ssize_t trusted_touch_enable_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct fts_ts_data *info = fts_data;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct fts_ts_data *info;
+
+	if (!client)
+		return scnprintf(buf, PAGE_SIZE, "client is null\n");
+
+	info = i2c_get_clientdata(client);
+	if (!info) {
+		FTS_ERROR("info is null\n");
+		return scnprintf(buf, PAGE_SIZE, "info is null\n");
+	}
 
 	return scnprintf(buf, PAGE_SIZE, "%d",
 			atomic_read(&info->trusted_touch_enabled));
@@ -1080,10 +1090,18 @@ static ssize_t trusted_touch_enable_show(struct device *dev,
 static ssize_t trusted_touch_enable_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct fts_ts_data *info = fts_data;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct fts_ts_data *info;
 	unsigned long value;
 	int err = 0;
 
+	if (!client)
+		return -EIO;
+	info = i2c_get_clientdata(client);
+	if (!info) {
+		FTS_ERROR("info is null\n");
+		return -EIO;
+	}
 	if (count > 2)
 		return -EINVAL;
 	err = kstrtoul(buf, 10, &value);
@@ -1113,7 +1131,17 @@ static ssize_t trusted_touch_enable_store(struct device *dev,
 static ssize_t trusted_touch_event_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct fts_ts_data *info = fts_data;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct fts_ts_data *info;
+
+	if (!client)
+		return scnprintf(buf, PAGE_SIZE, "client is null\n");
+
+	info = i2c_get_clientdata(client);
+	if (!info) {
+		FTS_ERROR("info is null\n");
+		return scnprintf(buf, PAGE_SIZE, "info is null\n");
+	}
 
 	return scnprintf(buf, PAGE_SIZE, "%d",
 			atomic_read(&info->trusted_touch_event));
@@ -1122,10 +1150,18 @@ static ssize_t trusted_touch_event_show(struct device *dev,
 static ssize_t trusted_touch_event_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct fts_ts_data *info = fts_data;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct fts_ts_data *info;
 	unsigned long value;
 	int err = 0;
 
+	if (!client)
+		return -EIO;
+	info = i2c_get_clientdata(client);
+	if (!info) {
+		FTS_ERROR("info is null\n");
+		return -EIO;
+	}
 	if (count > 2)
 		return -EINVAL;
 

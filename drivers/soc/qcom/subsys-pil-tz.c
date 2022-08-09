@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2020 Oplus. All rights reserved.
  */
-
-#define pr_fmt(fmt) "subsys-pil-tz: %s(): " fmt, __func__
 
 #include <linux/kernel.h>
 #include <linux/err.h>
@@ -146,7 +145,6 @@ enum pas_id {
 static struct icc_path *scm_perf_client;
 static int scm_pas_bw_count;
 static DEFINE_MUTEX(scm_pas_bw_mutex);
-static int is_inited;
 
 static void subsys_disable_all_irqs(struct pil_tz_data *d);
 static void subsys_enable_all_irqs(struct pil_tz_data *d);
@@ -181,7 +179,7 @@ static int scm_pas_enable_bw(void)
 {
 	int ret = 0;
 
-	if (IS_ERR(scm_perf_client))
+	if (!scm_perf_client)
 		return -EINVAL;
 
 	mutex_lock(&scm_pas_bw_mutex);
@@ -678,6 +676,11 @@ static int pil_shutdown_trusted(struct pil_desc *pil)
 	u32 scm_ret = 0;
 	int rc;
 	unsigned long pfn_start, pfn_end, pfn;
+	#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+	//Add for skip mini dump encryption
+	int i = 0;
+	struct md_ss_toc *toc = NULL;
+	#endif
 
 	if (d->subsys_desc.no_auth)
 		return 0;
@@ -696,6 +699,21 @@ static int pil_shutdown_trusted(struct pil_desc *pil)
 	if (rc)
 		goto err_clks;
 
+	#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+	//Add for skip mini dump encryption
+	//disable for TZ don't encryption
+	if ( pil->minidump_id ==3 ) {  //only check for modem . currently 3 is modem
+		pil->minidump_ss->md_ss_enable_status = 0;
+		pil->minidump_ss->encryption_status = 0;
+
+		for ( i = 0; i < pil->num_aux_minidump_ids; i++ ) {
+			toc = pil->aux_minidump[i];
+			toc->md_ss_enable_status = 0;
+			toc->encryption_status  = 0;
+		}
+	}
+	#endif
+
 	scm_ret = qcom_scm_pas_shutdown(d->pas_id);
 
 	pfn_start = pil->priv->region_start >> PAGE_SHIFT;
@@ -706,6 +724,21 @@ static int pil_shutdown_trusted(struct pil_desc *pil)
 			set_page_private(pfn_to_page(pfn), 0);
 	}
 
+	#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+	//Add for skip mini dump encryption
+	//disable for TZ don't encryption
+	//set back for miindump flow
+	if( pil->minidump_id == 3 ) {  //only check for modem . currently 3 is modem
+		pil->minidump_ss->md_ss_enable_status  =MD_SS_ENABLED;
+		pil->minidump_ss->encryption_status =MD_SS_ENCR_DONE;
+
+		for (i = 0; i < pil->num_aux_minidump_ids; i++) {
+			toc = pil->aux_minidump[i];
+			toc->md_ss_enable_status = MD_SS_ENABLED;
+			toc->encryption_status  = MD_SS_ENCR_DONE;
+		}
+	}
+	#endif
 	disable_unprepare_clocks(d->proxy_clks, d->proxy_clk_count);
 	disable_regulators(d, d->proxy_regs, d->proxy_reg_count, false);
 
@@ -758,10 +791,18 @@ static struct pil_reset_ops pil_ops_trusted = {
 	.deinit_image = pil_deinit_image_trusted,
 };
 
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+//Add for customized subsystem ramdump to skip generate dump cause by SAU
+bool SKIP_GENERATE_RAMDUMP = false;
+extern void mdmreason_set(char * buf);
+#endif
 static void log_failure_reason(const struct pil_tz_data *d)
 {
 	size_t size;
 	char *smem_reason, reason[MAX_SSR_REASON_LEN];
+	#ifdef CONFIG_OPLUS_FEATURE_AGINGTEST
+	char *function_name;
+	#endif /*OPLUS_FEATURE_AGINGTEST*/
 	const char *name = d->subsys_desc.name;
 
 	if (d->smem_id == -1)
@@ -775,11 +816,41 @@ static void log_failure_reason(const struct pil_tz_data *d)
 	}
 	if (!smem_reason[0]) {
 		pr_err("%s SFR: (unknown, empty string found).\n", name);
+		#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+		if (!strncmp(name, "modem", 5) || !strncmp(name, "adsp", 4)) {
+			subsystem_schedule_crash_uevent_work(d->dev, name, 0);
+		}
+		#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 		return;
 	}
 
 	strlcpy(reason, smem_reason, min(size, (size_t)MAX_SSR_REASON_LEN));
+	#ifdef CONFIG_OPLUS_FEATURE_AGINGTEST
+	function_name = parse_function_builtin_return_address((unsigned long)__builtin_return_address(0));
+	save_dump_reason_to_smem(reason, function_name);
+	#endif /*OPLUS_FEATURE_AGINGTEST*/
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
+
+	#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+	if (!strncmp(name, "modem", 5)) {
+		mdmreason_set(reason);
+
+		pr_err("oplus debug modem subsystem failure reason: %s.\n", reason);
+
+		if (strstr(reason, "OPLUS_MODEM_NO_RAMDUMP_EXPECTED") || strstr(reason, "oppomsg:go_to_error_fatal")) {
+			pr_err("%s will subsys reset", __func__);
+			SKIP_GENERATE_RAMDUMP = true;
+		}
+
+		pr_err("[crash_log]: %s to schedule crash work1!\n", name);
+		subsystem_schedule_crash_uevent_work(d->dev, name, reason);
+	}
+
+	if (!strncmp(name, "adsp", 4)) {
+		pr_err("[crash_log]: %s to schedule crash work2!\n", name);
+		subsystem_schedule_crash_uevent_work(d->dev, name, reason);
+	}
+	#endif
 }
 
 static int subsys_shutdown(const struct subsys_desc *subsys, bool force_stop)
@@ -1345,7 +1416,7 @@ static int pil_tz_generic_probe(struct platform_device *pdev)
 	 * is not yet registered. Return error if that driver returns with
 	 * any error other than EPROBE_DEFER.
 	 */
-	if (!is_inited)
+	if (!scm_perf_client)
 		return -EPROBE_DEFER;
 	if (IS_ERR(scm_perf_client))
 		return PTR_ERR(scm_perf_client);
@@ -1441,7 +1512,7 @@ static int pil_tz_generic_probe(struct platform_device *pdev)
 		if (IS_ERR(d->rmb_gp_reg)) {
 			dev_err(&pdev->dev, "Invalid resource for rmb_gp_reg\n");
 			rc = PTR_ERR(d->rmb_gp_reg);
-			goto load_from_pil;
+			goto err_ramdump;
 		}
 
 		rmb_gp_reg_val = __raw_readl(d->rmb_gp_reg);
@@ -1456,7 +1527,7 @@ static int pil_tz_generic_probe(struct platform_device *pdev)
 			pr_info("spss is brought out of reset by UEFI\n");
 			d->subsys_desc.powerup = subsys_powerup_boot_enabled;
 		}
-load_from_pil:
+
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						"sp2soc_irq_status");
 		d->irq_status = devm_ioremap_resource(&pdev->dev, res);
@@ -1583,7 +1654,6 @@ static int pil_tz_scm_pas_probe(struct platform_device *pdev)
 		ret = PTR_ERR(scm_perf_client);
 		pr_err("scm-pas: Unable to register bus client: %d\n", ret);
 	}
-	is_inited = 1;
 
 	return ret;
 }

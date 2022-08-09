@@ -18,10 +18,14 @@
 #include <trace/hooks/topology.h>
 #include <trace/hooks/debug.h>
 #include <trace/hooks/minidump.h>
+#include <trace/hooks/vh_af_packet.h>
+#include <trace/hooks/secureguard.h>
+#include <trace/hooks/vh_vmscan.h>
 #include <trace/hooks/wqlockup.h>
 #include <trace/hooks/sysrqcrash.h>
 #include <trace/hooks/cgroup.h>
 #include <trace/hooks/sys.h>
+
 
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
@@ -66,6 +70,20 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_is_fpsimd_save);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_ipi_stop);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_printk_store);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_show_regs);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_check_preempt_wakeup);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_check_preempt_tick);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_find_best_target);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_cpupri_find_fitness);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_secureguard_pre_handle);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_secureguard_post_handle);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_secureguard_exec_block);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_secureguard_mount_block);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_secureguard_send_to_user);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_check_dhcp_pkt);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_set_swappiness);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_set_inactive_ratio);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_check_throttle);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_check_process_reclaimer);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_wq_lockup_pool);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sysrq_crash);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_find_busiest_group);

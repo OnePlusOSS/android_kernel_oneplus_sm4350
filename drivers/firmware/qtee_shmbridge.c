@@ -2,7 +2,7 @@
 /*
  * QTI TEE shared memory bridge driver
  *
- * Copyright (c) 2020,2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -23,7 +23,6 @@
 #include "qtee_shmbridge_internal.h"
 
 #define DEFAULT_BRIDGE_SIZE	SZ_4M	/*4M*/
-#define MIN_BRIDGE_SIZE	SZ_4K	/*4K*/
 
 #define MAXSHMVMS 4
 #define PERM_BITS 3
@@ -281,19 +280,18 @@ int32_t qtee_shmbridge_allocate_shm(size_t size, struct qtee_shm *shm)
 	int32_t ret = 0;
 	unsigned long va;
 
+	if (size > DEFAULT_BRIDGE_SIZE) {
+		pr_err("requestd size %zu is larger than bridge size %d\n",
+			size, DEFAULT_BRIDGE_SIZE);
+		ret = -EINVAL;
+		goto exit;
+	}
+
 	if (IS_ERR_OR_NULL(shm)) {
 		pr_err("qtee_shm is NULL\n");
 		ret = -EINVAL;
 		goto exit;
 	}
-
-	if (size > default_bridge.size) {
-		pr_err("requestd size %zu is larger than bridge size %d\n",
-			size, default_bridge.size);
-		ret = -EINVAL;
-		goto exit;
-	}
-
 	size = roundup(size, 1 << default_bridge.min_alloc_order);
 
 	va = gen_pool_alloc(default_bridge.genpool, size);
@@ -352,7 +350,6 @@ EXPORT_SYMBOL(qtee_shmbridge_inv_shm_buf);
 static int qtee_shmbridge_init(struct platform_device *pdev)
 {
 	int ret = 0;
-	uint32_t custom_bridge_size;
 	uint32_t *ns_vm_ids;
 	uint32_t ns_vm_ids_hlos[] = {VMID_HLOS};
 	uint32_t ns_vm_ids_hyp[] = {};
@@ -370,16 +367,8 @@ static int qtee_shmbridge_init(struct platform_device *pdev)
 		return 0;
 	}
 
-	ret = of_property_read_u32((&pdev->dev)->of_node,
-		"qcom,custom-bridge-size", &custom_bridge_size);
-	if (ret)
-		default_bridge.size = DEFAULT_BRIDGE_SIZE;
-	else
-		default_bridge.size = custom_bridge_size * MIN_BRIDGE_SIZE;
-
-	pr_debug("qtee shmbridge registered default bridge with size %x bytes\n",
-		default_bridge.size);
-
+	/* allocate a contiguous page aligned buffer */
+	default_bridge.size = DEFAULT_BRIDGE_SIZE;
 	default_bridge.vaddr = (void *)__get_free_pages(GFP_KERNEL|__GFP_COMP,
 				get_order(default_bridge.size));
 	if (!default_bridge.vaddr)
@@ -421,7 +410,7 @@ static int qtee_shmbridge_init(struct platform_device *pdev)
 	if (ret) {
 		/* keep the mem pool and return if failed to enable bridge */
 		ret = 0;
-		goto exit;
+		goto exit_shmbridge_enable;
 	}
 
 	/*register default bridge*/
@@ -443,12 +432,13 @@ static int qtee_shmbridge_init(struct platform_device *pdev)
 	}
 
 	pr_debug("qtee shmbridge registered default bridge with size %d bytes\n",
-			default_bridge.size);
+			DEFAULT_BRIDGE_SIZE);
 
 	return 0;
 
 exit_deregister_default_bridge:
 	qtee_shmbridge_deregister(default_bridge.handle);
+exit_shmbridge_enable:
 	qtee_shmbridge_enable(false);
 exit_destroy_pool:
 	gen_pool_destroy(default_bridge.genpool);
@@ -458,7 +448,7 @@ exit_unmap:
 exit_freebuf:
 	free_pages((long)default_bridge.vaddr, get_order(default_bridge.size));
 	default_bridge.vaddr = NULL;
-exit:
+//exit:
 	return ret;
 }
 

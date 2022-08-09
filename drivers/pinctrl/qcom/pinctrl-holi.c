@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -578,8 +578,7 @@ enum holi_functions {
 	msm_mux_qup01,
 	msm_mux_qup02,
 	msm_mux_qup10,
-	msm_mux_qup11_f1,
-	msm_mux_qup11_f2,
+	msm_mux_qup11,
 	msm_mux_qup12,
 	msm_mux_qup13_f1,
 	msm_mux_qup13_f2,
@@ -614,7 +613,7 @@ enum holi_functions {
 static const char * const gpio_groups[] = {
 	"gpio0", "gpio1", "gpio2", "gpio3", "gpio4", "gpio5", "gpio6", "gpio7",
 	"gpio8", "gpio9", "gpio10", "gpio11", "gpio12", "gpio13", "gpio14",
-	"gpio15", "gpio16", "gpio17", "gpio18", "gpio18", "gpio19", "gpio20",
+	"gpio15", "gpio16", "gpio17",/*"gpio18",*/"gpio18", "gpio19", "gpio20",
 	"gpio21", "gpio22", "gpio23", "gpio24", "gpio25", "gpio26", "gpio27",
 	"gpio28", "gpio29", "gpio30", "gpio31", "gpio32", "gpio33", "gpio34",
 	"gpio35", "gpio36", "gpio37", "gpio38", "gpio39", "gpio40", "gpio41",
@@ -645,7 +644,7 @@ static const char * const CCI_ASYNC_groups[] = {
 	"gpio35", "gpio36", "gpio48", "gpio52", "gpio53",
 };
 static const char * const CCI_I2C_groups[] = {
-	"gpio2", "gpio3", "gpio39", "gpio40", "gpio41", "gpio42", "gpio43",
+	/*"gpio2", "gpio3", */"gpio39", "gpio40", "gpio41", "gpio42", "gpio43",
 	"gpio44",
 };
 static const char * const GPS_TX_groups[] = {
@@ -1027,10 +1026,7 @@ static const char * const qup02_groups[] = {
 static const char * const qup10_groups[] = {
 	"gpio13", "gpio14", "gpio15", "gpio16", "gpio17",
 };
-static const char * const qup11_f1_groups[] = {
-	"gpio27", "gpio28",
-};
-static const char * const qup11_f2_groups[] = {
+static const char * const qup11_groups[] = {
 	"gpio27", "gpio28",
 };
 static const char * const qup12_groups[] = {
@@ -1148,8 +1144,7 @@ static const struct msm_function holi_functions[] = {
 	FUNCTION(edp_lcd),
 	FUNCTION(qup13_f1),
 	FUNCTION(qup13_f2),
-	FUNCTION(qup11_f1),
-	FUNCTION(qup11_f2),
+	FUNCTION(qup11),
 	FUNCTION(PLL_BIST),
 	FUNCTION(qdss_gpio14),
 	FUNCTION(qdss_gpio15),
@@ -1335,10 +1330,10 @@ static const struct msm_pingroup holi_groups[] = {
 			0x9C00C, 15),
 	[26] = PINGROUP(26, qup13_f1, qup13_f2, NA, NA, NA, NA, NA, NA, NA,
 			0, -1),
-	[27] = PINGROUP(27, qup11_f1, qup11_f2, MDP_VSYNC, PLL_BIST, NA,
-			qdss_gpio14, NA, NA, NA, 0x9C010, 0),
-	[28] = PINGROUP(28, qup11_f1, qup11_f2, MDP_VSYNC, NA, qdss_gpio15,
-			NA, NA,	NA, NA, 0x9C010, 1),
+	[27] = PINGROUP(27, qup11, qup11, MDP_VSYNC, PLL_BIST, NA, qdss_gpio14,
+			NA, NA, NA, 0x9C010, 0),
+	[28] = PINGROUP(28, qup11, qup11, MDP_VSYNC, NA, qdss_gpio15, NA, NA,
+			NA, NA, 0x9C010, 1),
 	[29] = PINGROUP(29, cam_mclk, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[30] = PINGROUP(30, cam_mclk, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[31] = PINGROUP(31, cam_mclk, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),

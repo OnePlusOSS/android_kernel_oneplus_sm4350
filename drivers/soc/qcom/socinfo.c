@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2017-2019, Linaro Ltd.
  */
 
@@ -14,7 +14,7 @@
 #include <linux/sys_soc.h>
 #include <linux/types.h>
 #include <soc/qcom/socinfo.h>
-
+#include <soc/oplus/system/oplus_project.h>
 /*
  * SoC version type with major number in the upper 16 bits and minor
  * number in the lower 16 bits.
@@ -53,7 +53,6 @@ enum {
 	HW_PLATFORM_RCM	= 21,
 	HW_PLATFORM_STP = 23,
 	HW_PLATFORM_SBC = 24,
-	HW_PLATFORM_ADP = 25,
 	HW_PLATFORM_HDK = 31,
 	HW_PLATFORM_ATP = 33,
 	HW_PLATFORM_IDP = 34,
@@ -77,7 +76,6 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_DTV] = "DTV",
 	[HW_PLATFORM_STP] = "STP",
 	[HW_PLATFORM_SBC] = "SBC",
-	[HW_PLATFORM_ADP] = "ADP",
 	[HW_PLATFORM_HDK] = "HDK",
 	[HW_PLATFORM_ATP] = "ATP",
 	[HW_PLATFORM_IDP] = "IDP",
@@ -99,10 +97,6 @@ static const char * const qrd_hw_platform_subtype[] = {
 	[PLATFORM_SUBTYPE_SKUAB] = "SKUAB",
 	[PLATFORM_SUBTYPE_SKUG] = "SKUG",
 	[PLATFORM_SUBTYPE_QRD_INVALID] = "INVALID",
-};
-
-static const char * const adp_hw_platform_subtype[] = {
-	[0] = "ADP",
 };
 
 enum {
@@ -446,9 +440,6 @@ msm_get_platform_subtype(struct device *dev,
 		}
 		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
 					qrd_hw_platform_subtype[hw_subtype]);
-	} else if (socinfo_get_platform_type() == HW_PLATFORM_ADP) {
-		return scnprintf(buf, PAGE_SIZE, "%-.32s\n",
-					adp_hw_platform_subtype[0]);
 	} else {
 		if (hw_subtype >= PLATFORM_SUBTYPE_INVALID) {
 			pr_err("Invalid hardware platform subtype\n");
@@ -621,6 +612,9 @@ struct soc_id {
 	const char *name;
 };
 
+static char *fake_soc_id_name = "SM8150";
+static char *real_soc_id_name = "SM4350";
+
 static const struct soc_id soc_id[] = {
 	{ 87, "MSM8960" },
 	{ 109, "APQ8064" },
@@ -661,33 +655,18 @@ static const struct soc_id soc_id[] = {
 	{ 311, "APQ8096AU" },
 	{ 312, "APQ8096SG" },
 	{ 356, "KONA" },
-	{ 362, "SA8155" },
-	{ 367, "SA8155P" },
-	{ 377, "SA6155P" },
-	{ 384, "SA6155"},
-	{ 405, "SA8195P" },
 	{ 415, "LAHAINA" },
 	{ 439, "LAHAINAP" },
-	{ 449, "SC_DIREWOLF"},
 	{ 456, "LAHAINA-ATP" },
-	{ 460, "SA_DIREWOLF_IVI"},
-	{ 461, "SA_DIREWOLF_ADAS"},
 	{ 501, "SM8325" },
 	{ 502, "SM8325P" },
 	{ 450, "SHIMA" },
 	{ 454, "HOLI" },
-	{ 507, "BLAIR" },
-	{ 486, "MONACO" },
 	{ 458, "SDXLEMUR" },
-	{ 483, "SDXLEMUR-SD"},
-	{ 509, "SDXLEMUR-LITE"},
 	{ 475, "YUPIK" },
 	{ 484, "SDXNIGHTJAR" },
 	{ 441, "SCUBA" },
-	{ 497, "YUPIK-IOT" },
-	{ 498, "YUPIKP-IOT" },
 	{ 499, "YUPIKP" },
-	{ 515, "YUPIK-LTE" },
 };
 
 static struct qcom_socinfo *qsocinfo;
@@ -1204,10 +1183,15 @@ static const char *socinfo_machine(unsigned int id)
 	int idx;
 
 	for (idx = 0; idx < ARRAY_SIZE(soc_id); idx++) {
-		if (soc_id[idx].id == id)
-			return soc_id[idx].name;
-	}
 
+        if (soc_id[idx].id == id) {
+            if (is_confidential()) {
+                return fake_soc_id_name;
+            } else {
+                return real_soc_id_name;
+            }
+	}
+        }
 	return NULL;
 }
 

@@ -16,9 +16,14 @@
 #include <linux/rcupdate.h>
 #include <linux/android_kabi.h>
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#define SA_TYPE_LIGHT    (1 << 0)
+#endif
+
 struct workqueue_struct;
 
 struct work_struct;
+
 typedef void (*work_func_t)(struct work_struct *work);
 void delayed_work_timer_fn(struct timer_list *t);
 
@@ -107,6 +112,9 @@ struct work_struct {
 #ifdef CONFIG_LOCKDEP
 	struct lockdep_map lockdep_map;
 #endif
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	int ux_work;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 };
@@ -145,7 +153,9 @@ struct workqueue_attrs {
 	 * @nice: nice level
 	 */
 	int nice;
-
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	int ux_state;
+#endif
 	/**
 	 * @cpumask: allowed CPUs
 	 */
@@ -218,7 +228,8 @@ static inline unsigned int work_static(struct work_struct *work)
 	return *work_data_bits(work) & WORK_STRUCT_STATIC;
 }
 #else
-static inline void __init_work(struct work_struct *work, int onstack) { }
+static inline void __init_work(struct work_struct *work, int onstack) {
+}
 static inline void destroy_work_on_stack(struct work_struct *work) { }
 static inline void destroy_delayed_work_on_stack(struct delayed_work *work) { }
 static inline unsigned int work_static(struct work_struct *work) { return 0; }
@@ -345,7 +356,9 @@ enum {
 	 * http://thread.gmane.org/gmane.linux.kernel/1480396
 	 */
 	WQ_POWER_EFFICIENT	= 1 << 7,
-
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	WQ_UX	= 1 << 15,
+#endif
 	__WQ_DRAINING		= 1 << 16, /* internal: workqueue is draining */
 	__WQ_ORDERED		= 1 << 17, /* internal: workqueue is ordered */
 	__WQ_LEGACY		= 1 << 18, /* internal: create*_workqueue() */
@@ -390,6 +403,9 @@ enum {
  */
 extern struct workqueue_struct *system_wq;
 extern struct workqueue_struct *system_highpri_wq;
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern struct workqueue_struct *system_ux_wq;
+#endif
 extern struct workqueue_struct *system_long_wq;
 extern struct workqueue_struct *system_unbound_wq;
 extern struct workqueue_struct *system_freezable_wq;

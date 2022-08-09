@@ -275,6 +275,7 @@ static int refill_swap_slots_cache(struct swap_slots_cache *cache)
 	return cache->nr;
 }
 
+int disable_swap_slot = 1;
 int free_swap_slot(swp_entry_t entry)
 {
 	struct swap_slots_cache *cache;
@@ -282,7 +283,7 @@ int free_swap_slot(swp_entry_t entry)
 
 	si = swp_swap_info(entry);
 	cache = raw_cpu_ptr(&swp_slots);
-	if ((si && !(si->flags & SWP_SYNCHRONOUS_IO)) &&
+        if (!disable_swap_slot && (si && !(si->flags & SWP_SYNCHRONOUS_IO)) &&
 				use_swap_slot_cache && cache->slots_ret) {
 		spin_lock_irq(&cache->free_lock);
 		/* Swap slots cache may be deactivated before acquiring lock */
@@ -334,7 +335,12 @@ swp_entry_t get_swap_page(struct page *page)
 	 */
 	cache = raw_cpu_ptr(&swp_slots);
 
+#if defined(CONFIG_NANDSWAP)
+	if (likely(check_cache_active() && cache->slots) &&
+		!current_is_nswapoutd()) {
+#else
 	if (likely(check_cache_active() && cache->slots)) {
+#endif
 		mutex_lock(&cache->alloc_lock);
 		if (cache->slots) {
 repeat:

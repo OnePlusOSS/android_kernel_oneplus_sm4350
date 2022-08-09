@@ -22,4 +22,43 @@ source "drivers/soc/versatile/Kconfig"
 source "drivers/soc/xilinx/Kconfig"
 source "drivers/soc/zte/Kconfig"
 
+#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+source "drivers/soc/oplus/oplus_wakelock/Kconfig"
+#endif /* OPLUS_FEATURE_POWERINFO_STANDBY */
+
+#ifdef VENDOR_EDIT
+source "drivers/soc/oplus/system/Kconfig"
+##endif /* VENDOR_EDIT */
+
+#ifdef OPLUS_FEATURE_TP_BASIC
+source "drivers/soc/oplus/device_info/Kconfig"
+#endif /*OPLUS_FEATURE_TP_BASIC*/
+
+#ifdef OPLUS_FEATURE_SENSOR_SMEM
+source "drivers/soc/oplus/sensor/Kconfig"
+#endif /* OPLUS_FEATURE_SENSOR_SMEM */
+
+#ifdef OPLUS_FEATURE_THERMAL_HORAE
+source "drivers/soc/oplus/thermal/Kconfig"
+#endif /* OPLUS_FEATURE_THERMAL_HORAE */
+
+#ifdef OPLUS_FEATURE_CPUFREQ_BOUNCING
+source "drivers/soc/oplus/rt_info/Kconfig"
+#endif
+
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "drivers/soc/oplus/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 endmenu
+
+#ifdef OPLUS_FEATURE_MEMLEAK_DETECT
+#Add for svelte
+source "drivers/soc/oplus/svelte/Kconfig"
+#endif /* OPLUS_FEATURE_MEMLEAK_DETECT */
+
+#ifdef OPLUS_FEATURE_LOWMEM_DBG
+source "drivers/soc/oplus/lowmem_dbg/Kconfig"
+#endif /* OPLUS_FEATURE_LOWMEM_DBG */
+
+#Add for NandSwap
+source "drivers/soc/oplus/oplus_nandswap/Kconfig"

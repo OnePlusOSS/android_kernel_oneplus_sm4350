@@ -2951,6 +2951,41 @@ bool clk_is_match(const struct clk *p, const struct clk *q)
 }
 EXPORT_SYMBOL_GPL(clk_is_match);
 
+#ifdef CONFIG_OPLUS_POWER_UTIL
+void oplus_get_clk_stats(void)
+{
+	const char * const *pn;
+	struct clk_core *c;
+	struct clk *clk;
+	int clk_count;
+	int i = 0;
+
+	static const char * const clks_check[] = {
+		"ce1_clk",
+		"bi_tcxo",
+		NULL
+	};
+
+	for (pn = clks_check; *pn; pn++) {
+		clk = __clk_lookup(*pn);
+		if (!clk)
+			continue;
+
+		c = clk->core;
+		if (clk_core_is_enabled(c)) {
+			pr_info("Power Warnning: %s: %d\n", *pn, c->enable_count);
+			clk_count = c->enable_count;
+			if (!strcmp(*pn, "ce1_clk")) {
+				for (i = 0; i < clk_count; i++) {
+					clk_disable_unprepare(clk);
+				}
+			}
+			pr_info("Power Warnning: %s: %d\n", *pn, c->enable_count);
+		}
+	}
+}
+EXPORT_SYMBOL(oplus_get_clk_stats);
+#endif
 /***        debugfs support        ***/
 
 #ifdef CONFIG_DEBUG_FS
@@ -3447,7 +3482,11 @@ static const struct file_operations clk_enabled_list_fops = {
 	.release	= seq_release,
 };
 
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) || !defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
 static u32 debug_suspend;
+#else
+static u32 debug_suspend = 1;
+#endif
 
 /*
  * Print the names of all enabled clocks and their parents if

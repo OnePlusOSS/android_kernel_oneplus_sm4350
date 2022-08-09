@@ -50,4 +50,3 @@ config ATLFWD_FWD_NETLINK
           Expose forwarding engine APIs over the netlink socket.
 
 endif
-
