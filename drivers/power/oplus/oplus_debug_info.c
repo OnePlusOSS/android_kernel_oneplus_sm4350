@@ -11,9 +11,7 @@
 #include <linux/fs.h>
 #include <linux/module.h>
 
-#undef CONFIG_OPLUS_FEATURE_FEEDBACK
 #ifdef CONFIG_OPLUS_FEATURE_FEEDBACK
-//#include <linux/oplus_kevent.h>
 #include <soc/oplus/system/kernel_fb.h>
 #endif
 
@@ -641,6 +639,9 @@ static void oplus_chg_print_debug_info(struct oplus_chg_chip *chip)
 	struct timespec ts;
 	struct rtc_time tm;
 
+	if(chip==NULL){
+		return;
+	}
 	if (oplus_chg_debug_info.notify_type ||
 		oplus_chg_debug_notify_flag_is_set(OPLUS_NOTIFY_CHARGER_INFO))
 	{

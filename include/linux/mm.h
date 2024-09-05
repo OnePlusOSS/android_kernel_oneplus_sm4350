@@ -15,6 +15,7 @@
 #include <linux/atomic.h>
 #include <linux/debug_locks.h>
 #include <linux/mm_types.h>
+#include <linux/mmap_lock.h>
 #include <linux/range.h>
 #include <linux/pfn.h>
 #include <linux/percpu-refcount.h>
@@ -2502,6 +2503,7 @@ extern int install_special_mapping(struct mm_struct *mm,
 				   unsigned long flags, struct page **pages);
 
 unsigned long randomize_stack_top(unsigned long stack_top);
+unsigned long randomize_page(unsigned long start, unsigned long range);
 
 extern unsigned long get_unmapped_area(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 
@@ -2596,8 +2598,8 @@ int __must_check write_one_page(struct page *page);
 void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
-//#define VM_READAHEAD_PAGES	(SZ_512K / PAGE_SIZE)
-#define VM_READAHEAD_PAGES	(totalram_pages() > 0x100000 ? (SZ_512K / PAGE_SIZE) : (SZ_128K / PAGE_SIZE))
+#define VM_READAHEAD_PAGES	(SZ_128K / PAGE_SIZE)
+//#define VM_READAHEAD_PAGES	(totalram_pages() > 0x100000 ? (SZ_512K / PAGE_SIZE) : (SZ_128K / PAGE_SIZE))
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
 			pgoff_t offset, unsigned long nr_to_read);

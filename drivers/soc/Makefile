@@ -68,3 +68,7 @@ obj-$(CONFIG_OPLUS_HEALTHINFO)    +=  oplus/healthinfo/
 #Add for NandSwap
 obj-$(CONFIG_NANDSWAP)		+= oplus/oplus_nandswap/
 
+#ifdef OPLUS_FEATURE_ESIM
+obj-y += oplus/misc/
+#endif /* OPLUS_FEATURE_ESIM */
+

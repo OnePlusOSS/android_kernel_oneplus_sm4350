@@ -175,6 +175,10 @@ static u32 blacklist_uid[KERNEL_UNSL_APP_WAKEUP_LEN] = {0};
 static u32 record_blacklist_reject_index = 0;
 static u64 blacklist_reject_uid[KERNEL_UNSL_BLACK_REJECT_LEN] = {0};
 
+/*Add for qrtr bts info*/
+#define BTS_BUFFER_SIZE (80)
+static char bts_net_wakeup_buffer[BTS_BUFFER_SIZE+1];
+
 /*Add for mdaci wakeup apps*/
 static struct tcp_hook_simple_struct mdaci_app_wakeup_monitor_list = {
 	.set = {0},
@@ -316,6 +320,19 @@ static void oplus_match_qrtr_service_port(int type, int id, int port) {
 		match_qrtr_del_service_port(id, service_wakeup_times);
 		match_qrtr_del_service_port(id, mdaci_service_wakeup_times);
 	}
+}
+
+void bts_net_clear(void)
+{
+	memset(bts_net_wakeup_buffer, 0, sizeof(bts_net_wakeup_buffer));
+}
+bool bts_net_exist(void)
+{
+	return bts_net_wakeup_buffer[0] == 0 ? false : true;
+}
+ssize_t bts_net_fill(char * desc, ssize_t size)
+{
+	return scnprintf(desc, size > BTS_BUFFER_SIZE ? BTS_BUFFER_SIZE : size, "999 %s\n", bts_net_wakeup_buffer);
 }
 
 static void __oplus_match_qrtr_wakeup(int src_node, int src_port, int dst_port, unsigned int arg1, unsigned int arg2, u64 qrtr[][4], u64 wakeup[OPLUS_NW_WAKEUP_SUM], bool prt) {
@@ -719,10 +736,12 @@ static void tcp_output_hook_work_callback(struct work_struct *work) {
 		printk("[oplus_nwpower] IPAOutputWakeup: [%ld,****], %d, %d, %d",
 			tcp_output_list.ipv6_addr1,
 			tcp_output_list.pid, tcp_output_list.uid, tcp_output_list.set[3*i+2] & 0xFFFFFFFF);
+		snprintf(bts_net_wakeup_buffer, BTS_BUFFER_SIZE, "ou%d", tcp_output_list.uid);
 	} else {
 		printk("[oplus_nwpower] IPAOutputWakeup: %#X, %d, %d, %d",
 			tcp_output_list.ipv4_addr & 0xFFFFFF, tcp_output_list.pid, tcp_output_list.uid,
 			(tcp_output_list.set[3*i+2] & 0xFFFC000000000000) >> 50);
+		snprintf(bts_net_wakeup_buffer, BTS_BUFFER_SIZE, "ou%d", tcp_output_list.uid);
 	}
 	atomic_set(&tcp_is_input, 0);
 }
@@ -739,10 +758,12 @@ static void tcp_input_hook_work_callback(struct work_struct *work) {
 		printk("[oplus_nwpower] IPAInputWakeup: [%ld,****], %d, %d, %d",
 			tcp_input_list.ipv6_addr1,
 			tcp_input_list.pid, tcp_input_list.uid, tcp_input_list.set[3*i+2] & 0xFFFFFFFF);
+		snprintf(bts_net_wakeup_buffer, BTS_BUFFER_SIZE, "iu%d", tcp_input_list.uid);
 	} else {
 		printk("[oplus_nwpower] IPAInputWakeup: %#X, %d, %d, %d",
 			tcp_input_list.ipv4_addr & 0xFFFFFF, tcp_input_list.pid, tcp_input_list.uid,
 			(tcp_input_list.set[3*i+2] & 0xFFFC000000000000) >> 50);
+		snprintf(bts_net_wakeup_buffer, BTS_BUFFER_SIZE, "iu%d", tcp_input_list.uid);
 	}
 	atomic_set(&tcp_is_input, 0);
 }

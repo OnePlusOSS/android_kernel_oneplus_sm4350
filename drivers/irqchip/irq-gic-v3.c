@@ -45,6 +45,7 @@ void (*match_modem_wakeup)(void) = NULL;
 EXPORT_SYMBOL(match_modem_wakeup);
 void (*match_wlan_wakeup)(void) = NULL;
 EXPORT_SYMBOL(match_wlan_wakeup);
+extern is_first_ipcc_msg;
 #endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 
@@ -179,11 +180,11 @@ static inline void __iomem *gic_dist_base(struct irq_data *d)
 	}
 }
 
-static void gic_do_wait_for_rwp(void __iomem *base)
+static void gic_do_wait_for_rwp(void __iomem *base, u32 bit)
 {
 	u32 count = 1000000;	/* 1s! */
 
-	while (readl_relaxed(base + GICD_CTLR) & GICD_CTLR_RWP) {
+	while (readl_relaxed(base + GICD_CTLR) & bit) {
 		count--;
 		if (!count) {
 			pr_err_ratelimited("RWP timeout, gone fishing\n");
@@ -197,13 +198,13 @@ static void gic_do_wait_for_rwp(void __iomem *base)
 /* Wait for completion of a distributor change */
 static void gic_dist_wait_for_rwp(void)
 {
-	gic_do_wait_for_rwp(gic_data.dist_base);
+	gic_do_wait_for_rwp(gic_data.dist_base, GICD_CTLR_RWP);
 }
 
 /* Wait for completion of a redistributor change */
 static void gic_redist_wait_for_rwp(void)
 {
-	gic_do_wait_for_rwp(gic_data_rdist_rd_base());
+	gic_do_wait_for_rwp(gic_data_rdist_rd_base(), GICR_CTLR_RWP);
 }
 
 #ifdef CONFIG_ARM64
@@ -626,15 +627,17 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 
 		pr_warn("%s: %d triggered %s\n", __func__, irq, name);
 
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		if ((name != NULL)&&(strncmp(name, "ipa", strlen("ipa")) != 0))
+			log_irq_wakeup_reason(irq);
+		#endif
+
 		pr_warn("%s: irq:%d hwirq:%u triggered %s\n",
 			 __func__, irq, i, name);
 		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
-		if ((strncmp(name, "ipcc_0", strlen("ipcc_0")) == 0)|| 
-		(strncmp(name, "modem", strlen("modem")) == 0)||
-		(strncmp(name, "glink-native-modem", strlen("glink-native-modem")) == 0)||
-		(strncmp(name, "msi_modem_irq", strlen("msi_modem_irq")) == 0)||
-		(strncmp(name, "ipa", strlen("ipa")) == 0)||
-		(strncmp(name, "qmi", strlen("qmi")) == 0)){
+
+		if (strncmp(name, "ipcc_0", strlen("ipcc_0")) == 0) {
+			is_first_ipcc_msg = 1;
 			if (match_modem_wakeup != NULL) {
 				match_modem_wakeup();
 			}
@@ -647,9 +650,17 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		do {
+			if (strncmp(name, "ipa", strlen("ipa")) != 0) {
+				wakeup_reasons_statics(name, WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
+			}
+		} while (0);
+		#else
 		do {
 			wakeup_reasons_statics(name, WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
 		} while(0);
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 		#endif
 	}
 }
@@ -1726,7 +1737,7 @@ static void __init gic_populate_ppi_partitions(struct device_node *gic_node)
 
 	gic_data.ppi_descs = kcalloc(gic_data.ppi_nr, sizeof(*gic_data.ppi_descs), GFP_KERNEL);
 	if (!gic_data.ppi_descs)
-		return;
+		goto out_put_node;
 
 	nr_parts = of_get_child_count(parts_node);
 
@@ -1767,12 +1778,15 @@ static void __init gic_populate_ppi_partitions(struct device_node *gic_node)
 				continue;
 
 			cpu = of_cpu_node_to_id(cpu_node);
-			if (WARN_ON(cpu < 0))
+			if (WARN_ON(cpu < 0)) {
+				of_node_put(cpu_node);
 				continue;
+			}
 
 			pr_cont("%pOF[%d] ", cpu_node, cpu);
 
 			cpumask_set_cpu(cpu, &part->mask);
+			of_node_put(cpu_node);
 		}
 
 		pr_cont("}\n");

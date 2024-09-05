@@ -598,8 +598,8 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 	struct device_node *np;
 	int32_t hw_mask = 0;
 	int i = 0, ret = 0;
-	int id_size = 0;
-	uint32_t *main_val = NULL, *sub_val = NULL, *rf_val = NULL;
+	int id_size = 0, ignore_size = 0;
+	uint32_t *main_val = NULL, *sub_val = NULL, *rf_val = NULL, *ignore_list = NULL;
 	struct device_info *dev_info = g_dev_info;
 	bool match = false;
 
@@ -621,6 +621,28 @@ reinit_aboard_id(struct device *dev, struct manufacture_info *info)
 		dev_msg("failed to find node\n");
 		return -ENODEV;
 	}
+
+/*#ifdef OPLUS_TP_FEATURE_BASIC*/
+	ignore_size = of_property_count_elems_of_size(np, "devinfo-match-ignore-list", sizeof(uint32_t));
+	if (ignore_size > 0) {
+		ignore_list = (uint32_t *)kzalloc(sizeof(uint32_t) * ignore_size, GFP_KERNEL);
+		if (!ignore_list) {
+			dev_msg("ignore_list alloc err\n");
+			return -ENOMEM;
+		}
+
+		of_property_read_u32_array(np, "devinfo-match-ignore-list", ignore_list, ignore_size);
+		for (i = 0; i < ignore_size; i++) {
+			/*dev_msg("ignore list doing match %d %d %d\n", i, *(ignore_list + i), get_project());*/
+			if (*(ignore_list + i) == get_project()) {
+				dev_msg("found in ignore list %d going to return success\n", get_project());
+				ret = 0;
+				goto ignore_match_success;
+			}
+		}
+	}
+	dev_msg("not in ignore list, continue other match process %d\n", get_project());
+/*#endif OPLUS_TP_FEATURE_BASIC*/
 
 	id_size =
 		of_property_count_elems_of_size(np, "aboard-patterns",
@@ -715,6 +737,10 @@ read_failed:
 	if (rf_val) {
 		kfree(rf_val);
 	}
+
+ignore_match_success:
+	kfree(ignore_list);
+	ignore_list = NULL;
 
 seccess:
 	if (!ret) {

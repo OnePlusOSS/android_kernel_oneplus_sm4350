@@ -6638,6 +6638,7 @@ static void oplus_chg_other_thing(struct oplus_chg_chip *chip)
 			}
 		};
 	}
+	oplus_chg_debug_chg_monitor(chip);
 	oplus_chg_print_log(chip);
 	oplus_chg_critical_log(chip);
 #ifndef WPC_NEW_INTERFACE

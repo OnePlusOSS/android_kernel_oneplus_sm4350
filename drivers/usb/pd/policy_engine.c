@@ -4245,6 +4245,11 @@ static ssize_t select_pdo_store(struct device *dev,
 	int pdo, uv = 0, ua = 0;
 	int ret;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	/* BSP.CHG.Basic, 2021/10/27, hvdcp_opti return */
+	return size;
+#endif
+
 	mutex_lock(&pd->swap_lock);
 
 	/* Only allowed if we are already in explicit sink contract */

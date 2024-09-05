@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __KGSL_H
 #define __KGSL_H
@@ -70,6 +70,11 @@
 #define SCRATCH_RPTR_OFFSET(id) ((id) * sizeof(unsigned int))
 #define SCRATCH_RPTR_GPU_ADDR(dev, id) \
 	((dev)->scratch->gpuaddr + SCRATCH_RPTR_OFFSET(id))
+
+/* OFFSET to KMD postamble packets in scratch buffer */
+#define SCRATCH_POSTAMBLE_OFFSET (100 * sizeof(u64))
+#define SCRATCH_POSTAMBLE_ADDR(dev) \
+	((dev)->scratch->gpuaddr + SCRATCH_POSTAMBLE_OFFSET)
 
 /* Timestamp window used to detect rollovers (half of integer range) */
 #define KGSL_TIMESTAMP_WINDOW 0x80000000
@@ -479,7 +484,7 @@ void kgsl_core_exit(void);
 static inline bool kgsl_gpuaddr_in_memdesc(const struct kgsl_memdesc *memdesc,
 				uint64_t gpuaddr, uint64_t size)
 {
-	if (!memdesc)
+	if (IS_ERR_OR_NULL(memdesc))
 		return false;
 
 	/* set a minimum size to search for */

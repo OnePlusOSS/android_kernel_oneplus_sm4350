@@ -59,6 +59,7 @@ enum oplus_batt_type {
 	OPLUS_CL_4_45_BATT,
 	OPLUS_ATL_4_45_BATT,
 	OPLUS_CMX_4_45_BATT,
+	OPLUS_ATL_4_40_BATT,
 	OPLUS_NON_STD_BATT,
 };
 
@@ -76,6 +77,8 @@ static struct batt_info batt_info[OPLUS_NON_STD_BATT] =
 	{15000, {200, 350}, "Coslight", "V1.0"},
 	{68000, {550, 820}, "ATL", "V1.0"},
 	{27000, {350, 550}, "Cosmx", "V1.0"},
+	{150000, {820, 1100}, "ATL_4400", "V1.0"},
+
 };
 
 static bool fg_batt_valid_ocv = false;
@@ -4961,6 +4964,11 @@ static bool oplus_get_battery_authenticate(void)
 			&& batt_id_mv <= batt_info[OPLUS_CMX_4_45_BATT].batt_id_mv[1]) {
 		chip->oplus_batt_type = OPLUS_CMX_4_45_BATT;
 		return true;
+	} else if (batt_id_mv >= batt_info[OPLUS_ATL_4_40_BATT].batt_id_mv[0]
+                        && batt_id_mv <= batt_info[OPLUS_ATL_4_40_BATT].batt_id_mv[1]) {
+                chip->oplus_batt_type = OPLUS_ATL_4_40_BATT;
+                return true;
+
 	} else {
 		chip->oplus_batt_type = OPLUS_NON_STD_BATT;
 		return false;
@@ -5000,6 +5008,7 @@ static void register_gauge_devinfo(struct qpnp_qg *chip)
 	case OPLUS_LW_4_45_BATT:
 	case OPLUS_CL_4_45_BATT:
 	case OPLUS_ATL_4_45_BATT:
+	case OPLUS_ATL_4_40_BATT:
 		manufacture = batt_info[chip->oplus_batt_type].batt_vendor;
 		version = batt_info[chip->oplus_batt_type].batt_version;
 		break;

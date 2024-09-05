@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __KGSL_DEVICE_H
 #define __KGSL_DEVICE_H
@@ -261,16 +261,23 @@ struct kgsl_device {
 	struct {
 		void *ptr;
 		u32 size;
+		bool in_minidump;
 	} snapshot_memory;
 
 	struct kgsl_snapshot *snapshot;
+	/** @panic_nb: notifier block to capture GPU snapshot on kernel panic */
+	struct notifier_block panic_nb;
+	struct {
+		void *ptr;
+		u32 size;
+	} snapshot_memory_atomic;
 
 	u32 snapshot_faultcount;	/* Total number of faults since boot */
 	bool force_panic;		/* Force panic after snapshot dump */
 	bool skip_ib_capture;		/* Skip IB capture after snapshot */
 	bool prioritize_unrecoverable;	/* Overwrite with new GMU snapshots */
 	bool set_isdb_breakpoint;	/* Set isdb registers before snapshot */
-
+	bool snapshot_atomic;		/* To capture snapshot in atomic context*/
 	/* Use CP Crash dumper to get GPU snapshot*/
 	bool snapshot_crashdumper;
 	/* Use HOST side register reads to get GPU snapshot*/

@@ -8946,24 +8946,27 @@ rerun_work:
 }
 
 int oplus_chg_get_charger_subtype(void)
-{       
+{
         struct smb_charger *chg = NULL;
         const struct apsd_result *apsd_result = NULL;
-        
+
         if (!g_oplus_chip)
                 return CHARGER_SUBTYPE_DEFAULT;
-        
+
+	if (get_project() == 21227)
+		return CHARGER_SUBTYPE_DEFAULT;
+
         chg = &g_oplus_chip->pmic_spmi.smb5_chip->chg;
         if (chg->pd_active)
                 return CHARGER_SUBTYPE_PD;
-        
+
         apsd_result = smblib_get_apsd_result(chg);
         if (apsd_result->val == QTI_POWER_SUPPLY_TYPE_USB_HVDCP
                         || apsd_result->val == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3) {
         	return CHARGER_SUBTYPE_QC;
 
 	}
-        
+
         return CHARGER_SUBTYPE_DEFAULT;
 }
 
@@ -9036,9 +9039,13 @@ bool oplus_sm7250_get_pd_type(void)
         if (!g_oplus_chip)
                 return CHARGER_SUBTYPE_DEFAULT;
 
+	if (get_project() == 21227)
+		return false;
+
         chg = &g_oplus_chip->pmic_spmi.smb5_chip->chg;
         if (chg->pd_active)
                  return true;
+
         return false;
 }
 #endif
